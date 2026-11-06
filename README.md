@@ -1,4 +1,4 @@
-# BabyTV
+﻿# BabyTV
 
 面向 **3~6 岁** 的电视端启蒙应用：**识字 + 英语启蒙 + 书写练习**。
 所有题目语音**预合成离线音频**打包进 APK，不联网、不依赖电视自带 TTS 引擎；界面只有巨大字块，孩子用遥控器 `←` `→` 选、`OK` 确认即可。
@@ -298,8 +298,8 @@ scope: web | native | seed | audio | ci | docs
 ```powershell
 adb connect 192.168.1.23:5555     # 无线调试（Android 7 无需配对码）
 adb devices                       # 看到 device 才算成功；offline 就 adb disconnect 再连
-adb install -r dist\BabyTV-v1.1.13-tv-release.apk      # 电视
-adb install -r dist\BabyTV-v1.1.13-mobile-release.apk  # 手机 / 平板
+adb install -r dist\BabyTV-v1.1.14-tv-release.apk      # 电视
+adb install -r dist\BabyTV-v1.1.14-mobile-release.apk  # 手机 / 平板
 ```
 
 > 电视包名：`com.babytv.tv`；手机/平板包名：`com.babytv.mobile`（debug 分别加 `.debug` 后缀）。两个包独立，可同时安装在一台设备上。
@@ -368,7 +368,7 @@ adb shell input keyevent 4    # BACK
 
 ### 4.1 首次安装（U 盘，最稳）
 
-1. Releases 页下载：电视用 `BabyTV-v1.1.13-tv-release.apk`；手机/平板用 `BabyTV-v1.1.13-mobile-release.apk`。
+1. Releases 页下载：电视用 `BabyTV-v1.1.14-tv-release.apk`；手机/平板用 `BabyTV-v1.1.14-mobile-release.apk`。
 2. 拷到 U 盘根目录 → 插设备 → 打开「文件管理/U盘」→ 点击 APK。
 3. 弹出「禁止安装未知来源」→ 允许该文件管理器安装。
 4. 安装完成后在电视「我的应用」/ 手机桌面找到 **BabyTV**。
@@ -386,8 +386,8 @@ adb shell input keyevent 4    # BACK
 
 ```powershell
 adb connect <设备IP>:5555
-adb install -r dist\BabyTV-v1.1.13-tv-release.apk      # 电视
-adb install -r dist\BabyTV-v1.1.13-mobile-release.apk  # 手机 / 平板
+adb install -r dist\BabyTV-v1.1.14-tv-release.apk      # 电视
+adb install -r dist\BabyTV-v1.1.14-mobile-release.apk  # 手机 / 平板
 adb shell am start -n com.babytv.tv/com.babytv.tv.MainActivity
 adb shell am start -n com.babytv.mobile/com.babytv.tv.MainActivity
 adb logcat -v time | Select-String -Pattern "babytv|AndroidRuntime|chromium"
