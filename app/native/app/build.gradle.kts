@@ -74,18 +74,24 @@ android {
     buildFeatures {
         buildConfig = true
     }
+
+    androidResources {
+        // 音频必须明文存放，否则 assets.openFd() 无法直接播放
+        noCompress += "mp3"
+    }
 }
 
 dependencies {
     // 刻意零第三方依赖：包体小、Android 5.0 兼容性最好
 }
 
-// 把网页和题库同步进 assets（仓库里只维护 app/web、admin、data/seed.json 三份源）
+// 把网页、题库、音频同步进 assets（仓库里维护 app/web、admin、data/seed.json、data/audio 四份源）
 val repoRoot = rootProject.projectDir.parentFile.parentFile
 val syncWebAssets by tasks.registering(Sync::class) {
     from(File(repoRoot, "app/web")) { into("web") }
     from(File(repoRoot, "admin")) { into("admin") }
     from(File(repoRoot, "data/seed.json")) { rename { "questions.json" } }
+    from(File(repoRoot, "data/audio")) { into("audio") }
     from(File(repoRoot, "shared/katex")) { into("web/assets/vendor/katex") }
     from(File(repoRoot, "shared/math.js")) { into("web/assets/js") }
     into(layout.projectDirectory.dir("src/main/assets"))

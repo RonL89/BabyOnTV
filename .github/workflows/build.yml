@@ -1,0 +1,69 @@
+name: Build TV APK
+
+on:
+  push:
+    branches: ["main", "master"]
+    paths-ignore:
+      - "**/*.md"
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: Assemble TV Debug APK
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install SDK platform & build-tools
+        run: sdkmanager "platforms;android-36" "build-tools;36.0.0" "platform-tools"
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.14.3"
+
+      # 防止打出"没有声音"的 APK：题目音频 + 每选项音频 + 2 个反馈音必须齐全
+      - name: Verify offline audio package
+        run: |
+          python3 - <<'PY'
+          import json, os, sys
+          data = json.load(open("data/seed.json", encoding="utf-8"))
+          missing = []
+          for i, q in enumerate(data):
+              if not os.path.exists(f"data/audio/q_{i}.mp3"):
+                  missing.append(f"q_{i}.mp3")
+              for j in range(len(q["a"])):
+                  if not os.path.exists(f"data/audio/q_{i}_opt_{j}.mp3"):
+                      missing.append(f"q_{i}_opt_{j}.mp3")
+          for f in ("sfx_correct.mp3", "sfx_wrong.mp3"):
+              if not os.path.exists("data/audio/" + f):
+                  missing.append(f)
+          print(f"题库 {len(data)} 题，音频文件 {len(os.listdir('data/audio'))} 个")
+          if missing:
+              print("缺失音频，例如：", missing[:10], "共", len(missing))
+              sys.exit(1)
+          PY
+
+      - name: Assemble
+        working-directory: app/native
+        run: gradle assembleTvDebug --no-daemon --stacktrace
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: StudyOnTV-tv-debug
+          path: app/native/app/build/outputs/apk/tv/debug/*.apk
+          if-no-files-found: error
+          retention-days: 30

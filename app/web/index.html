@@ -1,38 +1,291 @@
 <!DOCTYPE html>
 <html lang="zh-CN">
 <head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no">
-<meta name="theme-color" content="#08080A">
-<title>题了个题 · 先学再看</title>
-<link rel="stylesheet" href="assets/css/tv.css">
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>快乐识字</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body {
+    width: 100%; height: 100%; overflow: hidden;
+    background: #0B1020;
+    font-family: "PingFang SC", "Microsoft YaHei", "Noto Sans CJK SC", sans-serif;
+    color: #fff;
+    user-select: none;
+  }
+  #app {
+    width: 100%; height: 100%;
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    gap: 3.5vh;
+    padding: 4vh 5vw;
+  }
+  /* 题干：大而不喧宾夺主 */
+  #stem {
+    font-size: 5.2vh;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-align: center;
+    line-height: 1.35;
+    color: #EAF0FF;
+    text-shadow: 0 0.4vh 1.6vh rgba(0,0,0,.55);
+    max-height: 22vh;
+    overflow: hidden;
+  }
+  /* 选项：巨大卡片横排 */
+  #options {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 4vw;
+    width: 100%;
+  }
+  .card {
+    flex: 0 0 auto;
+    width: 26vw;
+    height: 26vw;
+    max-width: 380px; max-height: 380px;
+    min-width: 180px; min-height: 180px;
+    display: flex; align-items: center; justify-content: center;
+    border-radius: 4vh;
+    background: linear-gradient(160deg, #1C2440, #141A2E);
+    border: 0.7vh solid rgba(255,255,255,.10);
+    box-shadow: 0 1.6vh 4vh rgba(0,0,0,.45), inset 0 0.2vh 0 rgba(255,255,255,.08);
+    font-size: 12vw;
+    font-weight: 900;
+    line-height: 1;
+    color: #FFFFFF;
+    transition: transform .12s ease, border-color .12s ease, box-shadow .12s ease;
+  }
+  .card.en { font-size: 7.2vw; letter-spacing: .01em; }
+  .card:focus, .card.focused {
+    outline: none;
+    border-color: #35E0B0;
+    transform: scale(1.06);
+    box-shadow: 0 0 3vh rgba(53,224,176,.55), 0 1.6vh 4vh rgba(0,0,0,.45);
+  }
+  .card.correct {
+    border-color: #35E0B0;
+    background: linear-gradient(160deg, #0C4436, #07281F);
+    animation: pop .32s ease;
+  }
+  .card.wrong {
+    border-color: #FF5A6E;
+    background: linear-gradient(160deg, #4A1220, #2A0A12);
+    animation: shake .38s ease;
+  }
+  @keyframes pop { 0%{transform:scale(1)} 55%{transform:scale(1.12)} 100%{transform:scale(1.06)} }
+  @keyframes shake { 0%,100%{transform:translateX(0)} 20%{transform:translateX(-1.6vw)} 60%{transform:translateX(1.6vw)} 80%{transform:translateX(-0.8vw)} }
+  /* 底部极简提示 */
+  #hint {
+    font-size: 2.2vh;
+    color: rgba(255,255,255,.32);
+    letter-spacing: .18em;
+  }
+  #toast {
+    position: fixed; left: 50%; top: 8vh; transform: translateX(-50%);
+    font-size: 2.4vh; color: rgba(255,255,255,.45);
+    opacity: 0; transition: opacity .3s;
+  }
+</style>
 </head>
 <body>
-<div class="bg"><div class="glow glow-a"></div><div class="glow glow-b"></div><div class="grain"></div></div>
-<header class="topbar">
-  <div class="brand"><span class="logo"><i></i></span><span class="brand-text">题了个题</span></div>
-  <div class="topright"><span class="pill" id="topPill">正在连接…</span><span class="clock" id="clock"></span></div>
-</header>
-<div class="update-tip" id="updateTip"><span class="update-text" id="updateText"></span><button class="update-btn" id="updateGo">更新</button><button class="update-close" id="updateClose">×</button></div>
-<main id="stage">
-  <section class="screen" id="screen-quiz">
-    <div class="quiz-wrap">
-      <div class="quiz-head"><div class="crumb"><span class="crumb-main" id="qMode">学习任务</span></div><div class="counter"><b id="qIndex">0</b><i id="qTotal"></i></div></div>
-      <h1 class="question" id="qText">加载中…</h1>
-      <div class="options" id="qOptions"></div>
-      <div class="pool-status" id="qPool"></div>
-      <div class="quiz-foot"><div class="dots-progress" id="qDots"></div><div class="hint">方向键选择 · OK 确认</div></div>
-    </div>
-  </section>
-  <section class="screen" id="screen-lock">
-    <div class="lock-wrap"><div class="lock-badge" id="lockIcon"></div><h1 class="lock-title" id="lockTitle"></h1><p class="lock-desc" id="lockDesc"></p><div class="lock-actions" id="lockActions"></div><p class="lock-note" id="lockNote"></p></div>
-  </section>
-  <section class="screen" id="screen-pair">
-    <div class="lock-wrap"><div class="qr-box" id="pairQr"></div><h1 class="lock-title">扫码<em>管理这台设备</em></h1><p class="lock-desc">家长设备连接同一 WiFi<br><b id="pairUrl"></b><br>打开后输入管理密码</p><button class="btn btn-primary focusable" data-action="quiz">返回答题</button></div>
-  </section>
-</main>
-<script src="assets/js/qrcode.min.js"></script>
-<script src="assets/js/math.js"></script>
-<script src="assets/js/app.js"></script>
+<div id="app">
+  <div id="stem">准备开始…</div>
+  <div id="options"></div>
+  <div id="hint">← → 选择　OK 确认</div>
+</div>
+<div id="toast"></div>
+
+<script>
+(function () {
+  "use strict";
+
+  var round = null;      // 当前一轮（含 id / nonce / question）
+  var cards = [];
+  var focus = 0;
+  var locked = false;    // 判题/播放反馈期间锁定输入
+  var failed = 0;
+
+  var $stem = document.getElementById("stem");
+  var $options = document.getElementById("options");
+  var $toast = document.getElementById("toast");
+
+  function nativeCall(name, args) {
+    try {
+      var api = window.SOTVNative;
+      if (api && typeof api[name] === "function") return api[name].apply(api, args || []);
+    } catch (e) { /* 忽略原生桥异常（如浏览器预览） */ }
+    return null;
+  }
+
+  function play(file) {
+    if (file) nativeCall("playAudio", [file]);
+  }
+
+  function token() {
+    return nativeCall("apiToken") || "";
+  }
+
+  function toast(text) {
+    $toast.textContent = text || "";
+    $toast.style.opacity = text ? "1" : "0";
+  }
+
+  function api(path, body) {
+    var headers = { "Content-Type": "application/json" };
+    var t = token();
+    if (t) headers["X-Device-Token"] = t;
+    return fetch(path, {
+      method: "POST",
+      headers: headers,
+      body: JSON.stringify(body || {})
+    }).then(function (r) { return r.json(); });
+  }
+
+  function isAscii(text) {
+    // 只对英文单词缩小字号；数字（数学题）保持巨大
+    return /[A-Za-z]/.test(String(text));
+  }
+
+  // ---------- 渲染 ----------
+  function render(r) {
+    round = r;
+    var q = r.question || r;
+    $stem.textContent = q.q || "";
+    $options.innerHTML = "";
+    cards = [];
+
+    var list = q.a || [];
+    list.forEach(function (text, i) {
+      var el = document.createElement("div");
+      el.className = "card" + (isAscii(String(text)) ? " en" : "");
+      el.textContent = text;
+      el.setAttribute("role", "option");
+      el.setAttribute("tabindex", "0");
+      el.dataset.index = String(i);
+      el.addEventListener("click", function () { choose(i); });
+      $options.appendChild(el);
+      cards.push(el);
+    });
+
+    focus = 0;
+    paintFocus();
+    // 题目一出现，自动朗读题干
+    play(audioName(q, null));
+  }
+
+  function audioName(q, index) {
+    if (!q || !q.id) return "";
+    return index === null || index === undefined
+      ? q.id + ".mp3"
+      : q.id + "_opt_" + index + ".mp3";
+  }
+
+  function paintFocus() {
+    cards.forEach(function (el, i) {
+      var on = i === focus;
+      el.classList.toggle("focused", on);
+      if (on) el.focus();
+    });
+  }
+
+  function moveFocus(delta) {
+    if (locked || !cards.length) return;
+    var next = focus + delta;
+    if (next < 0 || next >= cards.length) return;
+    focus = next;
+    paintFocus();
+    // 只有左右切换时，才朗读该选项
+    play(audioName(round.question, focus));
+  }
+
+  // ---------- 取题 ----------
+  function nextRound() {
+    locked = false;
+    failed = 0;
+    api("/api/quiz/start", {}).then(function (data) {
+      if (data && data.question) { render(data); return; }
+      if (data && data.next && data.next.question) { render(data.next); return; }
+      if (data && data.pending) { toast("等待家长批改"); return; }
+      if (data && data.blocked) { $stem.textContent = "今天的学习时间结束啦"; $options.innerHTML = ""; return; }
+      if (data && data.watching) { $stem.textContent = "先看会儿动画吧"; $options.innerHTML = ""; return; }
+      if (data && data.reviewed) { toast("已批改"); nextRound(); return; }
+      retry();
+    }).catch(retry);
+  }
+
+  function retry() {
+    failed++;
+    $stem.textContent = failed > 3 ? "连接失败，请重启应用" : "加载中…";
+    $options.innerHTML = "";
+    setTimeout(nextRound, Math.min(1500 * failed, 6000));
+  }
+
+  // ---------- 答题 ----------
+  function choose(index) {
+    if (locked || !round || !cards.length) return;
+    locked = true;
+    focus = index;
+    paintFocus();
+
+    var payload = {
+      roundId: round.id,
+      nonce: round.nonce,
+      selections: [index],
+      text: "",
+      drawing: ""
+    };
+
+    api("/api/quiz/answer", payload).then(function (result) {
+      if (!result || result.error || result.pending || result.blocked) {
+        locked = false;
+        toast(result && result.error ? "这道题先跳过" : "请稍后再试");
+        return;
+      }
+      var correct = !!result.correct;
+      cards[index].classList.add(correct ? "correct" : "wrong");
+      // 先播反馈语音，再切下一题（否则会被打断）
+      play(correct ? "sfx_correct.mp3" : "sfx_wrong.mp3");
+      setTimeout(function () {
+        if (result.next && result.next.question) {
+          render(result.next);
+        } else {
+          nextRound();
+        }
+      }, correct ? 1400 : 1700);
+    }).catch(function () {
+      setTimeout(function () {
+        locked = false;
+        toast("网络异常");
+      }, 800);
+    });
+  }
+
+  // ---------- 遥控器 ----------
+  window.TV = {
+    move: function (dir) {
+      if (dir === "left") moveFocus(-1);
+      else if (dir === "right") moveFocus(1);
+    },
+    select: function () { choose(focus); },
+    back: function () { nativeCall("exitToLauncher"); }
+  };
+
+  document.addEventListener("keydown", function (e) {
+    if (e.key === "ArrowLeft") { e.preventDefault(); moveFocus(-1); }
+    else if (e.key === "ArrowRight") { e.preventDefault(); moveFocus(1); }
+    else if (e.key === "Enter" || e.key === " ") { e.preventDefault(); choose(focus); }
+  });
+
+  // 从后台回到前台时继续
+  window.SOTV_RESUME = function () {
+    if (!round) nextRound();
+  };
+
+  // 稍等 WebView 注入原生桥（SOTVNative）后再开始
+  setTimeout(nextRound, 250);
+})();
+</script>
 </body>
 </html>

@@ -100,10 +100,11 @@ class LocalStore(context: Context) : SQLiteOpenHelper(context, "studyontv.db", n
     }
 
     fun config(): JSONObject {
+        // 幼儿启蒙默认：随时可练（practice 模式不受时段/额度拦截）、全天可用
         val defaults = JSONObject().put("dailyMinutes", 40).put("sessionMinutes", 10)
             .put("questionsPerRound", 5).put("roundsPerDay", 3).put("passRatio", 0.6)
-            .put("windowStart", "18:30").put("windowEnd", "20:00").put("allDay", false).put("spacedRepetitionEnabled", false)
-            .put("playMode", "round").put("extraEnabled", true)
+            .put("windowStart", "18:30").put("windowEnd", "20:00").put("allDay", true).put("spacedRepetitionEnabled", false)
+            .put("playMode", "practice").put("extraEnabled", true)
             .put("wrongThreshold", 3).put("extraQuestions", 2)
             .put("difficultyRewardEnabled", false)
             .put("difficultyRewards", JSONObject().put("1", 1).put("2", 2).put("3", 3).put("4", 4).put("5", 5))
@@ -236,6 +237,27 @@ class LocalStore(context: Context) : SQLiteOpenHelper(context, "studyontv.db", n
             db.setTransactionSuccessful()
         } finally { db.endTransaction() }
         return items.length()
+    }
+
+    /** 内置题库更新时整体替换：清空题目与学习进度，再导入新题库 */
+    fun replaceQuestions(items: JSONArray) {
+        val db = writableDatabase
+        db.beginTransaction()
+        try {
+            db.delete("questions", null, null)
+            db.delete("question_progress", null, null)
+            inbound@ for (i in 0 until items.length()) {
+                try {
+                    upsertQuestion(items.getJSONObject(i))
+                } catch (e: Exception) {
+                    // 单题格式有问题时跳过，不影响其余题目
+                    continue@inbound
+                }
+            }
+            db.setTransactionSuccessful()
+        } finally {
+            db.endTransaction()
+        }
     }
 
     fun deleteQuestion(id: String): Boolean = writableDatabase.delete("questions", "id=?", arrayOf(id)) > 0

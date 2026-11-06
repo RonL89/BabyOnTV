@@ -4,34 +4,44 @@ import android.content.Context
 import org.json.JSONArray
 import org.json.JSONObject
 
-
-
-
-
 object SeedAssets {
+    private fun signature(arr: JSONArray): String {
+        val first = if (arr.length() > 0) arr.getJSONObject(0).optString("q") else ""
+        return arr.length().toString() + "|" + first.hashCode()
+    }
+
     fun ensureQuestions(context: Context, store: LocalStore) {
-        if (store.countQuestions() > 0) return
-        try {
-            val raw = context.assets.open("questions.json").use { it.readBytes().toString(Charsets.UTF_8) }
-            val arr = JSONArray(raw)
-            val normalized = JSONArray()
-            for (i in 0 until arr.length()) {
-                val src = arr.getJSONObject(i)
-                normalized.put(
-                    JSONObject()
-                        .put("id", src.optString("id"))
-                        .put("subject", src.optString("subject", "常识"))
-                        .put("level", src.optString("level", src.optString("grade", "三年级")))
-                        .put("difficulty", src.optInt("difficulty", 2))
-                        .put("q", src.optString("q", src.optString("stem")))
-                        .put("a", src.optJSONArray("a") ?: src.optJSONArray("options"))
-                        .put("k", if (src.has("k")) src.optInt("k") else src.optInt("answerIndex", 0))
-                        .put("tip", src.optString("tip", ""))
-                )
-            }
-            store.importQuestions(normalized)
+        val raw = try {
+            context.assets.open("questions.json").use { it.readBytes().toString(Charsets.UTF_8) }
         } catch (e: Exception) {
-            
+            return
+        }
+        val arr = try { JSONArray(raw) } catch (e: Exception) { return }
+        val sig = signature(arr)
+        // 题库与内置题库不一致（重新打包了新题）时，重建题库；家长自建题目在题库一致时保留
+        if (store.countQuestions() > 0 && store.get("seed_signature") == sig) return
+
+        val normalized = JSONArray()
+        for (i in 0 until arr.length()) {
+            val src = arr.getJSONObject(i)
+            normalized.put(
+                JSONObject()
+                    // 固定 ID：与离线音频文件名一一对应（q_0.mp3 / q_0_opt_1.mp3）
+                    .put("id", src.optString("id").ifEmpty { "q_$i" })
+                    .put("subject", src.optString("subject", "常识"))
+                    .put("level", src.optString("level", src.optString("grade", "")))
+                    .put("difficulty", src.optInt("difficulty", 2))
+                    .put("q", src.optString("q", src.optString("stem")))
+                    .put("a", src.optJSONArray("a") ?: src.optJSONArray("options"))
+                    .put("k", if (src.has("k")) src.optInt("k") else src.optInt("answerIndex", 0))
+                    .put("tip", src.optString("tip", ""))
+            )
+        }
+        try {
+            store.replaceQuestions(normalized)
+            store.set("seed_signature", sig)
+        } catch (e: Exception) {
+            e.printStackTrace()
         }
     }
 }

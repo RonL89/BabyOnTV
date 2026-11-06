@@ -16,6 +16,18 @@ open class DeviceBridge(protected val activity: Activity, private val connection
     }
 
     @JavascriptInterface
+    fun playAudio(filename: String) {
+        if (filename.isBlank()) return
+        val safe = filename.substringAfterLast('/')
+        activity.runOnUiThread { AudioPlayer.play(activity, safe) }
+    }
+
+    @JavascriptInterface
+    fun stopAudio() {
+        activity.runOnUiThread { AudioPlayer.stop() }
+    }
+
+    @JavascriptInterface
     fun apiToken(): String = AdminAuth.deviceToken
 
     @JavascriptInterface
