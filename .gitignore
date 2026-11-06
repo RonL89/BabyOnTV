@@ -4,6 +4,7 @@
 /app/native/.gradle/
 /app/native/.idea/
 /app/native/local.properties
+/dist/
 *.iml
 
 # 已废弃的两版服务端（保留在本地，不入库）
@@ -15,18 +16,24 @@
 Thumbs.db
 *.log
 node_modules/
+__pycache__/
+*.pyc
 
-# 构建时从 app/web、admin、data/seed.json 自动同步，不入库
+# 构建时从 app/web、admin、data/seed.json、data/audio 自动同步，不入库
 /app/native/app/src/main/assets/web/
 /app/native/app/src/main/assets/admin/
 /app/native/app/src/main/assets/questions.json
+/app/native/app/src/main/assets/audio/
+
+# APK / 签名
+BabyTV-*.apk
 StudyOnTV-*.apk
 *.idsig
 *.jks
-studyontv-release.jks
+*.keystore
+babytv-release.jks
 
 /app/server/
-
 /parent-ui/
 
 # Kotlin compiler cache

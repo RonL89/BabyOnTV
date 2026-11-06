@@ -1,4 +1,4 @@
-name: Build TV APK
+name: Build BabyTV APK
 
 on:
   push:
@@ -7,9 +7,12 @@ on:
       - "**/*.md"
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 jobs:
   build:
-    name: Assemble TV Debug APK
+    name: Assemble BabyTV TV APK
     runs-on: ubuntu-latest
     timeout-minutes: 40
 
@@ -29,7 +32,6 @@ jobs:
           set -e
           SDKMANAGER="${ANDROID_HOME:-$ANDROID_SDK_ROOT}/cmdline-tools/latest/bin/sdkmanager"
           if [ ! -x "$SDKMANAGER" ]; then SDKMANAGER="$(command -v sdkmanager)"; fi
-          echo "sdkmanager: $SDKMANAGER"
           yes | "$SDKMANAGER" --licenses > /dev/null 2>&1 || true
           "$SDKMANAGER" --install "platforms;android-36" "build-tools;36.0.0" "platform-tools"
 
@@ -60,14 +62,49 @@ jobs:
               sys.exit(1)
           PY
 
+      - name: Read version
+        id: ver
+        run: |
+          VERSION=$(grep -oP 'versionName\s*=\s*"\K[^"]+' app/native/app/build.gradle.kts | head -1)
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "APP_VERSION=$VERSION"
+
       - name: Assemble
         working-directory: app/native
         run: gradle assembleTvDebug --no-daemon --stacktrace
 
-      - name: Upload APK
+      - name: Rename APK
+        run: |
+          mkdir -p dist
+          cp app/native/app/build/outputs/apk/tv/debug/app-tv-debug.apk \
+             "dist/BabyTV-v${{ steps.ver.outputs.version }}-tv-debug.apk"
+          cd dist && sha256sum *.apk > SHA256SUMS.txt && cat SHA256SUMS.txt
+
+      - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
-          name: StudyOnTV-tv-debug
-          path: app/native/app/build/outputs/apk/tv/debug/*.apk
+          name: BabyTV-tv-debug
+          path: dist/*
           if-no-files-found: error
-          retention-days: 30
+          retention-days: 90
+
+      # 打 tag 并发布到 GitHub Releases，提供固定下载地址
+      - name: Publish GitHub Release
+        if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ steps.ver.outputs.version }}
+          name: BabyTV v${{ steps.ver.outputs.version }}
+          body: |
+            BabyTV 幼儿识字 / 英语 / 数学启蒙 TV 版（离线语音）
+
+            - 题库：识字 100 + 英语 96 + 数学 79，共 275 题
+            - 语音：全量离线音频，无需联网、不依赖系统 TTS
+            - 交互：遥控器 ←/→ 选择，OK 确认，切换选项自动朗读
+            - 适配：minSdk 21，Android 7.0（海信 VIDAA 等老电视）
+
+            下载 `BabyTV-v${{ steps.ver.outputs.version }}-tv-debug.apk`，
+            SHA256 见 `SHA256SUMS.txt`。
+          files: dist/*
+          fail_on_unmatched_files: true
+          generate_release_notes: false
