@@ -94,6 +94,40 @@
     font-size: 2.4vh; color: rgba(255,255,255,.45);
     opacity: 0; -webkit-transition: opacity .3s; transition: opacity .3s;
   }
+  /* 触摸设备按钮（电视上隐藏） */
+  #parent, #replayBtn { display: none; }
+  /* ---------- 手机 / 平板适配（电视横屏不受影响） ---------- */
+  @media (max-width: 900px) {
+    #app { padding: 3vh 4vw; }
+    #stem { font-size: 4.6vh; margin-bottom: 2.5vh; max-height: 24vh; letter-spacing: .04em; }
+    #options { width: 100%; }
+    .card {
+      width: auto; height: 34vh;
+      min-width: 0; min-height: 0; max-width: none; max-height: none;
+      -webkit-box-flex: 1; -webkit-flex: 1 1 0; flex: 1 1 0;
+      padding: 0 1vw;
+      border-radius: 3vh;
+      font-size: 9vw;
+      line-height: 1.05;
+    }
+    .card + .card { margin-left: 2.5vw; }
+    .card.en { font-size: 5.5vw; }
+    #hint { font-size: 2vh; margin-top: 2.5vh; letter-spacing: .05em; }
+    #parent, #replayBtn {
+      display: block; position: fixed; z-index: 5;
+      background: rgba(255,255,255,.08); color: rgba(255,255,255,.72);
+      border: 1px solid rgba(255,255,255,.18); border-radius: 999px;
+      font-family: inherit; -webkit-appearance: none; outline: none;
+    }
+    #parent { top: 2vh; right: 3vw; padding: 1.2vh 3vw; font-size: 2.2vh; }
+    #replayBtn { right: 3vw; bottom: 3vh; padding: 1.6vh 4vw; font-size: 2.4vh; }
+  }
+  @media (max-width: 900px) and (orientation: landscape) {
+    #stem { font-size: 7vh; }
+    .card { height: 42vh; font-size: 10vw; }
+    .card.en { font-size: 6vw; }
+    #hint { margin-top: 2vh; }
+  }
 </style>
 </head>
 <body>
@@ -102,6 +136,8 @@
   <div id="options"></div>
   <div id="hint">← → 选择　OK 确认　MENU 再听一遍</div>
 </div>
+<button id="parent" type="button">家长</button>
+<button id="replayBtn" type="button">🔊 再听一遍</button>
 <div id="toast"></div>
 
 <script>
@@ -116,6 +152,13 @@
   var stem = document.getElementById("stem");
   var optionsBox = document.getElementById("options");
   var toastBox = document.getElementById("toast");
+  var hintBox = document.getElementById("hint");
+  var parentBtn = document.getElementById("parent");
+  var replayBtn = document.getElementById("replayBtn");
+
+  function isCompact() {
+    try { return !!(window.matchMedia && window.matchMedia("(max-width: 900px)").matches); } catch (e) { return false; }
+  }
 
   // ---------- 原生桥 ----------
   function nativeCall(name, args) {
@@ -307,6 +350,35 @@
   });
 
   window.SOTV_RESUME = function () { if (!round) nextRound(); };
+
+  // ---------- 手机 / 平板：触摸操作 ----------
+  if (isCompact() && hintBox) hintBox.textContent = "点选项作答 · 长按题干进家长";
+
+  function openParentPanel() {
+    if (window.SOTVNative && typeof window.SOTVNative.openParent === "function") {
+      nativeCall("openParent");
+      return;
+    }
+    location.href = "/admin";   // 手机浏览器：直接打开电视上的家长面板
+  }
+
+  if (replayBtn) replayBtn.onclick = function (e) { if (e) e.preventDefault(); replay(); };
+  if (parentBtn) parentBtn.onclick = function (e) { if (e) e.preventDefault(); openParentPanel(); };
+
+  // 长按题干 1.5 秒也能进家长面板
+  var holdTimer = null;
+  function holdEnd() { if (holdTimer) { clearTimeout(holdTimer); holdTimer = null; } }
+  function holdStart() { holdEnd(); holdTimer = setTimeout(openParentPanel, 1500); }
+  if (stem) {
+    stem.addEventListener("touchstart", holdStart, false);
+    stem.addEventListener("touchend", holdEnd, false);
+    stem.addEventListener("touchmove", holdEnd, false);
+    stem.addEventListener("touchcancel", holdEnd, false);
+    stem.addEventListener("mousedown", holdStart, false);
+    stem.addEventListener("mouseup", holdEnd, false);
+    stem.addEventListener("mouseleave", holdEnd, false);
+  }
+  document.addEventListener("contextmenu", function (e) { e.preventDefault(); });
 
   // 稍等 WebView 注入原生桥后再开始
   setTimeout(nextRound, 250);

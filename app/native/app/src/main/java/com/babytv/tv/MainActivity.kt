@@ -29,7 +29,8 @@ open class MainActivity : Activity() {
         val reason = intent.getStringExtra("reason")
         page = if (this is GateActivity && reason != null && reason != "timeup") "lock?reason=$reason" else "quiz"
         createWeb()
-        GateService.start(this)
+        // 屏幕时间守护只针对电视：手机/平板不叠加系统级悬浮窗，避免影响正常使用
+        if (DeviceBridge.isTv(this)) GateService.start(this)
         if (this !is GateActivity) Updater.check(this) { info ->
             val newer = Updater.newerThanCurrent(this, info) ?: return@check
             runOnUiThread {

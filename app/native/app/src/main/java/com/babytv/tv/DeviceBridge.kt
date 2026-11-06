@@ -46,6 +46,14 @@ open class DeviceBridge(protected val activity: Activity, private val connection
 
     @JavascriptInterface
     fun exitToLauncher() {
+        // 手机/平板：返回键直接退到后台，不当成"学习时间未到"拦住
+        if (!isTv(activity)) {
+            activity.runOnUiThread {
+                AudioPlayer.stop()
+                activity.moveTaskToBack(true)
+            }
+            return
+        }
         val status = DeviceRuntime.learning.status()
         if (status.getString("reason").isNotEmpty() || status.optLong("remainingSeconds") <= 0) return
         activity.runOnUiThread {

@@ -21,6 +21,7 @@
 | 出题去重 | 最近 **30 题不重复**（`recent_qids`），小题库自动重置队列 |
 | 错题重现 | 答错后**隔 5 题**再出（`retry_qids`），间隔复习（`spacedRepetitionEnabled`）默认开启 |
 | 复听 / 纠错 | 遥控器 `MENU`（或 `PLAY/PAUSE`）重播题干；答错后高亮并**朗读正确选项** |
+| 手机 / 平板 | 独立 `mobile` 包（`com.babytv.mobile`）：点按卡片作答、竖屏/横屏自适应、底部「再听一遍」、长按题干或点「家长」进家长页 |
 | 家长面板 | 电视上直接显示 `http://<电视IP>:8099/admin`，手机/电脑浏览器**免扫码**打开 |
 
 ### 关键参数
@@ -28,10 +29,10 @@
 | 项 | 值 |
 | :-- | :-- |
 | versionName / versionCode | CI：`1.1.<run>` / `10000 + run`；本地：`1.1.0` / `10000`（自动，无需手改） |
-| applicationId | `com.babytv.tv`（debug 构建带 `.debug` 后缀） |
+| applicationId | 电视 `com.babytv.tv`；手机/平板 `com.babytv.mobile`（debug 构建带 `.debug` 后缀，可同时安装） |
 | 签名 | release 包使用自有 keystore（PKCS12），CI 从 GitHub Secrets 注入 |
 | minSdk / targetSdk / compileSdk | `21` / `34` / `36` |
-| APK 体积 | 约 12 MB（release，含 1102 个离线音频） |
+| APK 体积 | 电视版约 12 MB；手机版约 12 MB（各含 1102 个离线音频） |
 | 题库文件 | `data/seed.json` |
 | 音频目录 | `data/audio/`（构建时同步进 `assets/audio/`） |
 
@@ -222,8 +223,10 @@ python scripts/generate_audio.py
 
 ```powershell
 cd app/native
-gradle assembleTvDebug       # debug：app/build/outputs/apk/tv/debug/app-tv-debug.apk
-gradle assembleTvRelease     # release：需先配置 keystore（见 2.8）
+gradle assembleTvDebug        # 电视 debug：app/build/outputs/apk/tv/debug/app-tv-debug.apk
+gradle assembleMobileDebug    # 手机/平板 debug：app/build/outputs/apk/mobile/debug/app-mobile-debug.apk
+gradle assembleTvRelease      # 电视 release（需先配置 keystore，见 2.8）
+gradle assembleMobileRelease  # 手机/平板 release
 ```
 
 > 仓库**不含 gradle wrapper**（`gradlew`），请用系统 `gradle` 或 `gradle wrapper` 自行生成；CI 用 `gradle/actions/setup-gradle` 提供 Gradle 8.14.3。
@@ -235,7 +238,7 @@ gradle assembleTvRelease     # release：需先配置 keystore（见 2.8）
 git push   # 触发 .github/workflows/build.yml
 ```
 
-流水线步骤：装 JDK17/SDK → 校验音频完整性（缺文件直接失败）→ 有 `KEYSTORE_BASE64` 时 `assembleTvRelease`（release 签名，否则自动回退 debug）→ 重命名 + SHA256 → 上传 Artifact → **发布 GitHub Release（标签 `v1.1.<run>`）**。
+流水线步骤：装 JDK17/SDK → 校验音频完整性（缺文件直接失败）→ 有 `KEYSTORE_BASE64` 时 `assembleTvRelease assembleMobileRelease`（release 签名，否则自动回退 debug）→ 重命名 + SHA256 → 上传 Artifact → **发布 GitHub Release（标签 `v1.1.<run>`）**。
 
 构建前 `Sync` 任务会把 `app/web`、`admin`、`data/seed.json`、`data/audio` 同步进 `assets/`（这些生成物已 gitignore）。
 
@@ -260,7 +263,7 @@ scope: web | native | seed | audio | ci | docs
 | `versionCode` | `10000 + GITHUB_RUN_NUMBER`，只增不减，覆盖安装不会冲突 |
 | `versionName` | `1.1.<GITHUB_RUN_NUMBER>`；若本次是 tag 触发则用 tag 名 |
 | Release 标签 | `v<versionName>`，每次 push `main` 自动创建/更新 |
-| 附件 | `BabyTV-v<version>-tv-release.apk` + `SHA256SUMS.txt`（无密钥时是 `-tv-debug.apk`） |
+| 附件 | `BabyTV-v<version>-tv-release.apk`（电视）+ `BabyTV-v<version>-mobile-release.apk`（手机/平板）+ `SHA256SUMS.txt`；无密钥时是 `-tv-debug.apk` / `-mobile-debug.apk` |
 
 本地构建不设环境变量时：`versionCode=10000`、`versionName=1.1.0`。想固定语义版本，打 tag 即可（如 `git tag v1.2.0 && git push --tags`）。
 
@@ -291,21 +294,23 @@ scope: web | native | seed | audio | ci | docs
 ```powershell
 adb connect 192.168.1.23:5555     # 无线调试（Android 7 无需配对码）
 adb devices                       # 看到 device 才算成功；offline 就 adb disconnect 再连
-adb install -r dist\BabyTV-v1.1.0-tv-release.apk
+adb install -r dist\BabyTV-v1.1.5-tv-release.apk      # 电视
+adb install -r dist\BabyTV-v1.1.5-mobile-release.apk  # 手机 / 平板
 ```
 
-> debug 包的包名带后缀：**`com.babytv.tv.debug`**（未加后缀的 `com.babytv.tv` 是 release 包名）。
+> 电视包名：`com.babytv.tv`；手机/平板包名：`com.babytv.mobile`（debug 分别加 `.debug` 后缀）。两个包独立，可同时安装在一台设备上。
 > ⚠️ 从旧版迁移：旧包 `com.studyontv.tv` 与新包互不兼容，先 `adb uninstall com.studyontv.tv`（或电视上卸载）再装新版；卸载会清空旧进度（本项目改名时本来也是 0 进度）。
 
 ### 3.3 常用命令速查
 
 | 目的 | 命令 |
 | :-- | :-- |
-| 启动应用 | `adb shell am start -n com.babytv.tv.debug/com.babytv.tv.MainActivity` |
-| 或（等价） | `adb shell monkey -p com.babytv.tv.debug -c android.intent.category.LAUNCHER 1` |
-| 强制停止 | `adb shell am force-stop com.babytv.tv.debug` |
-| 卸载 | `adb uninstall com.babytv.tv.debug` |
-| 清空学习数据（保留下载包） | `adb shell pm clear com.babytv.tv.debug` |
+| 启动应用（电视） | `adb shell am start -n com.babytv.tv.debug/com.babytv.tv.MainActivity` |
+| 启动应用（手机/平板） | `adb shell am start -n com.babytv.mobile.debug/com.babytv.mobile.MainActivity` |
+| 或（等价） | `adb shell monkey -p com.babytv.mobile.debug -c android.intent.category.LAUNCHER 1` |
+| 强制停止 | `adb shell am force-stop com.babytv.mobile.debug` |
+| 卸载 | `adb uninstall com.babytv.mobile.debug` |
+| 清空学习数据（保留下载包） | `adb shell pm clear com.babytv.mobile.debug` |
 | 查看版本 | `adb shell dumpsys package com.babytv.tv.debug \| Select-String versionName` |
 | 已装包名 | `adb shell pm list packages \| Select-String babytv` |
 | 本机 HTTP 服务端口 | `adb shell "curl -s 127.0.0.1:8099/api/hello"`（电视无 curl 时跳过） |
@@ -359,19 +364,31 @@ adb shell input keyevent 4    # BACK
 
 ### 4.1 首次安装（U 盘，最稳）
 
-1. 电脑下载 `BabyTV-v1.1.0-tv-release.apk`（Releases 页）。
-2. 拷到 U 盘根目录 → 插电视 → 打开电视「文件管理/U盘」→ 点击 APK。
+1. Releases 页下载：电视用 `BabyTV-v1.1.5-tv-release.apk`；手机/平板用 `BabyTV-v1.1.5-mobile-release.apk`。
+2. 拷到 U 盘根目录 → 插设备 → 打开「文件管理/U盘」→ 点击 APK。
 3. 弹出「禁止安装未知来源」→ 允许该文件管理器安装。
-4. 安装完成后在「我的应用」里找到 **BabyTV**。
+4. 安装完成后在电视「我的应用」/ 手机桌面找到 **BabyTV**。
+
+### 4.1.1 手机 / 平板使用说明
+
+- **作答**：直接点按巨大卡片；底部有「🔊 再听一遍」。
+- **家长入口**：点右上角「家长」，或长按题干 1.5 秒；输入家长密码即可。
+- **屏幕**：竖屏、横屏都自适应；平板横屏最接近电视体验。
+- **管控**：手机/平板不启用系统级悬浮窗监控（避免影响正常使用），学习时段由 App 内部规则控制；返回键直接退到后台。
+- **共存**：包名 `com.babytv.mobile`，与电视版 `com.babytv.tv` 可同时安装，学习进度各自独立。
 
 ### 4.2 无线 ADB 安装（调试期最快）
 
 ```powershell
-adb connect <电视IP>:5555
-adb install -r dist\BabyTV-v1.1.0-tv-release.apk
-adb shell am start -n com.babytv.tv.debug/com.babytv.tv.MainActivity
+adb connect <设备IP>:5555
+adb install -r dist\BabyTV-v1.1.5-tv-release.apk      # 电视
+adb install -r dist\BabyTV-v1.1.5-mobile-release.apk  # 手机 / 平板
+adb shell am start -n com.babytv.tv/com.babytv.tv.MainActivity
+adb shell am start -n com.babytv.mobile/com.babytv.mobile.MainActivity
 adb logcat -v time | Select-String -Pattern "babytv|AndroidRuntime|chromium"
 ```
+
+> 装 debug 包时把包名换成 `com.babytv.tv.debug` / `com.babytv.mobile.debug`。
 
 若电视没有「网络调试」入口：先用 USB 线连电视与电脑，执行 `adb devices` 确认后 `adb tcpip 5555`，拔线后用 IP 连接。
 
@@ -384,15 +401,15 @@ adb logcat -v time | Select-String -Pattern "babytv|AndroidRuntime|chromium"
             └─ 进入答题：题干自动朗读 → ←/→ 选项发音 → OK 判题发音 → 自动下一题
 ```
 
-- 权限（悬浮窗/使用情况/无障碍/后台）**全部可选**，不授权也能正常答题。
-- 回家长页：答题界面**连按遥控器 `↑` 5 次**。
-- 家长密码遗忘：`adb shell pm clear com.babytv.tv.debug` 重置（会清空进度）。
+- 电视权限（悬浮窗/使用情况/无障碍/后台）**全部可选**；手机/平板只提示「后台运行」，不授权也能正常答题。
+- 回家长页：电视**连按 `↑` 5 次**；手机/平板点右上「家长」或长按题干 1.5 秒。
+- 家长密码遗忘：`adb shell pm clear com.babytv.tv`（或 `com.babytv.mobile`）重置（会清空进度）。
 
 ### 4.4 装机常见失败
 
 | 现象 | 原因 / 处理 |
 | :-- | :-- |
-| `INSTALL_FAILED_UPDATE_INCOMPATIBLE` | 之前装过不同签名/包名的同名应用 → 先 `adb uninstall com.babytv.tv.debug` |
+| `INSTALL_FAILED_UPDATE_INCOMPATIBLE` | 之前装过不同签名/包名的同名应用 → 先 `adb uninstall com.babytv.tv.debug`（手机版用 `com.babytv.mobile.debug`） |
 | `INSTALL_FAILED_INSUFFICIENT_STORAGE` | 电视存储不足，清理缓存 |
 | 安装后打开黑屏 | WebView 未就绪或端口冲突；`adb logcat` 看 `LanServer` / `chromium`；确认 8099 未被占用 |
 | 有画面但没声音 | 检查 APK 是否来自 CI（会校验音频）；`adb logcat` 看 `MediaPlayer`；电视静音/音量 |
@@ -416,17 +433,19 @@ adb logcat -v time | Select-String -Pattern "babytv|AndroidRuntime|chromium"
 | 出题去重 | ✅ 最近 30 题不重复；错题隔 5 题重现 |
 | 签名 | ✅ 自有 release keystore（PKCS12），CI 自动签名 |
 | 品牌 | ✅ 小熊图标 + 320×180 电视横幅，包名 `com.babytv.tv` |
-| 构建 | ✅ CI 空环境（无 wrapper）构建通过，产物已发布 Release |
+| 手机 / 平板 | ✅ `mobile` 变体（`com.babytv.mobile`）：触摸作答、竖屏/横屏布局、触摸重听与家长入口；390×844 / 844×390 / 800×1280 截图核验 |
+| 构建 | ✅ CI 同时构建电视 + 手机两个签名包，并发布到 Release |
 
 已知限制（需要的话可以继续改）：
 
 1. **签名密钥只有一份**：丢失后无法再发布可覆盖安装的更新，务必备份 `keystore/`（见 2.8）。
 2. **音频来源**：云 TTS 输出，个人自用没问题，商用需替换（见 1.3）。
 3. **旧包名迁移**：从上游包 `com.studyontv.tv` 升级必须先卸载旧版（数据不继承）；新装包名 `com.babytv.tv`。
-4. **首次家长密码**：必须在电视上用遥控器/键盘输入，属于一次性成本。
-5. **屏幕时间管控（GateService/无障碍）** 在 VIDAA 上可能受限；不影响答题主流程。
+4. **首次家长密码**：必须在设备上用遥控器/键盘/触摸输入，属于一次性成本。
+5. **屏幕时间管控（GateService/无障碍）** 仅电视启用；手机/平板不叠加系统悬浮窗，且 VIDAA 上可能受限，均不影响答题主流程。
 6. **去重窗口是 30 题**：玩超过 30 题后旧题会再次出现（符合幼儿复习预期，不是无限不重复）。
-7. **未适配超低端 720p**：字号用 `vh/vw`，极端分辨率下需微调。
+7. **电视未适配超低端 720p**：字号用 `vh/vw`，极端分辨率下需微调；手机/平板已单独适配。
+8. **手机/平板进度独立**：与电视版是两个包，学习记录不互通（后续可做导出/导入）。
 
 ---
 
@@ -446,7 +465,10 @@ adb logcat -v time | Select-String -Pattern "babytv|AndroidRuntime|chromium"
 - 把 `KEYSTORE_PATH` / `KEYSTORE_PASS` / `KEY_ALIAS` / `KEY_PASS` 写进 `app/native/local.properties`；
 - 或直接用仓库根目录的 `keystore/keystore.properties`（Gradle 自动读取）。
 
-然后 `cd app/native && gradle assembleTvRelease`。
+然后 `cd app/native && gradle assembleTvRelease`（手机/平板用 `assembleMobileRelease`）。
+
+**Q7：手机/平板怎么装？和电视版冲突吗？**
+不冲突。手机/平板装 `BabyTV-v*-mobile-release.apk`（包名 `com.babytv.mobile`），电视装 `-tv-release.apk`（`com.babytv.tv`）；两个包可以同时存在，但学习进度各自独立。
 
 **Q6：为什么 Release 版本号是 `1.1.6` 这种？**
 `versionName = 1.1.<CI run number>`、`versionCode = 10000 + run`，全自动、只增不减。打 tag（`git push --tags`）时改用 tag 名。
@@ -467,6 +489,7 @@ adb logcat -v time | Select-String -Pattern "babytv|AndroidRuntime|chromium"
 - ✅ `MENU` 再听一遍 + 答错念正确答案
 - ✅ `versionCode` 取 CI run number，`versionName` 自动递增
 - ✅ 家长面板电视端直显 `http://IP:8099/admin`（免扫码）
+- ✅ 手机 / 平板版：触摸作答、竖屏/横屏布局、底部重听、右上「家长」入口、独立安装包
 
 可以继续做：
 

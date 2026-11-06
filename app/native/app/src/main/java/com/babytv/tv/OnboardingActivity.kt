@@ -69,8 +69,8 @@ class OnboardingActivity : Activity() {
         val width = minOf(resources.displayMetrics.widthPixels - dp(48), dp(960))
         val content = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
         outer.addView(content, LinearLayout.LayoutParams(width, -2))
-        content.addView(text("设置使用时间管理", if (tv) 28f else 26f, bold = true))
-        content.addView(text("权限按需开启，稍后随时可以调整。", 14f, muted), LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(8) })
+        content.addView(text(if (tv) "设置使用时间管理" else "BabyTV 使用设置", if (tv) 28f else 26f, bold = true))
+        content.addView(text(if (tv) "权限按需开启，稍后随时可以调整。" else "手机/平板按需授权，随时可在系统设置里修改。", 14f, muted), LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(8) })
         val mode = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL; setPadding(dp(16), dp(12), dp(16), dp(12))
             background = shape(if (tv) 0xFF241E17.toInt() else 0xFFFFF2DF.toInt())
@@ -81,20 +81,21 @@ class OnboardingActivity : Activity() {
         mode.addView(modeDescription, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(4) })
         content.addView(mode, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(18); bottomMargin = dp(16) })
 
-        val cards = listOf(
-            permission("悬浮窗", "到时间后显示学习页", android.R.drawable.ic_menu_view, { GateOverlay.canDraw(this) }) {
+        val cards = mutableListOf<View>()
+        if (tv) {
+            cards.add(permission("悬浮窗", "到时间后显示学习页", android.R.drawable.ic_menu_view, { GateOverlay.canDraw(this) }) {
                 openSettings(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, true)
-            },
-            permission("使用情况访问", "更准确地计算应用使用时间", android.R.drawable.ic_menu_recent_history, { Foreground.hasUsageAccess(this) }) {
+            })
+            cards.add(permission("使用情况访问", "更准确地计算应用使用时间", android.R.drawable.ic_menu_recent_history, { Foreground.hasUsageAccess(this) }) {
                 openSettings(Settings.ACTION_USAGE_ACCESS_SETTINGS)
-            },
-            permission("无障碍服务", "帮助及时识别应用切换", android.R.drawable.ic_menu_manage, { WatchAccessibilityService.connected }) {
+            })
+            cards.add(permission("无障碍服务", "帮助及时识别应用切换", android.R.drawable.ic_menu_manage, { WatchAccessibilityService.connected }) {
                 openSettings(Settings.ACTION_ACCESSIBILITY_SETTINGS)
-            },
-            permission("后台运行", "减少系统清理，适合电视常驻", android.R.drawable.ic_lock_idle_alarm, null) {
-                openSettings(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, true)
-            }
-        )
+            })
+        }
+        cards.add(permission("后台运行", if (tv) "减少系统清理，适合电视常驻" else "允许后台播放与更新，避免被系统清理", android.R.drawable.ic_lock_idle_alarm, null) {
+            openSettings(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, true)
+        })
         val columns = if (resources.displayMetrics.widthPixels / resources.displayMetrics.density >= 720) 2 else 1
         cards.chunked(columns).forEach { group ->
             val row = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; isBaselineAligned = false }
