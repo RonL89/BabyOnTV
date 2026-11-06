@@ -15,7 +15,7 @@ import android.webkit.WebView
 
 class ParentActivity : Activity() {
     private var verified = false
-    private var web: WebView? = null
+    private var pauseInfo: TextView? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -91,11 +91,11 @@ class ParentActivity : Activity() {
     private fun connection() {
         val content = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setBackgroundColor(0xFFF8F9F6.toInt()) }
 
-        // 免扫码入口：电视上直接显示内网地址，手机/电脑浏览器输入即可
+        // 手机/电脑浏览器打开家长面板；电视上只显示地址与常用开关（不再内嵌一份重复页面）
         val info = DeviceRuntime.connection(this)
         val ip = info.optString("ip")
         val port = info.optInt("port", 8099)
-        val address = if (ip.isEmpty()) "未连接 Wi-Fi，请先在电视上连接网络" else "http://$ip:$port/admin"
+        val address = if (ip.isEmpty()) "未连接 Wi-Fi，请先在电视上连接网络" else "http://$ip:$port/admin/"
         content.addView(TextView(this).apply {
             text = "家长面板（手机 / 电脑浏览器直接打开）\n$address\n同一 Wi-Fi 下无需扫码"
             textSize = 20f
@@ -113,18 +113,63 @@ class ParentActivity : Activity() {
         button("修改密码") { form(true, true) }
         button("返回答题") { startActivity(Intent(this, MainActivity::class.java)); finish() }
         content.addView(controls)
-        web = WebShell(this).create(Prefs.localBase(this) + "#/pair").also {
-            it.addJavascriptInterface(DeviceBridge(this, true), "SOTVNative")
-            content.addView(it, LinearLayout.LayoutParams(-1, 0, 1f))
+
+        // 休息时段：到点之前孩子端只显示「休息中」并自动退出，家长可随时取消
+        val rest = LinearLayout(this)
+        fun restButton(label: String, minutes: Int) {
+            rest.addView(Button(this).apply {
+                text = label
+                learningStyle()
+                setOnClickListener { setPause(minutes) }
+            }, LinearLayout.LayoutParams(0, -2, 1f))
         }
-        setContentView(content)
+        restButton("休息 1 小时", 60)
+        restButton("休息 2 小时", 120)
+        restButton("休息 4 小时", 240)
+        restButton("取消休息", 0)
+        content.addView(rest)
+
+        val tv = TextView(this).apply {
+            textSize = 16f
+            setTextColor(0xFF303B31.toInt())
+            setPadding(dp(24), dp(8), dp(24), dp(8))
+            text = pauseText()
+        }
+        pauseInfo = tv
+        content.addView(tv)
+        content.addView(Button(this).apply {
+            text = "退出应用（回电视桌面）"
+            learningStyle()
+            setOnClickListener { quitApp() }
+        }, LinearLayout.LayoutParams(-1, -2))
+        setContentView(ScrollView(this).apply { isFillViewport = true; addView(content) })
+    }
+
+    private fun pauseText(): String {
+        val until = DeviceRuntime.store.get("pause_until").toLongOrNull() ?: 0L
+        val left = (until - System.currentTimeMillis()) / 60000L
+        return if (left > 0) "当前休息中，约剩 $left 分钟（孩子端不会出题）" else "当前没有休息时段"
+    }
+
+    private fun setPause(minutes: Int) {
+        val until = if (minutes <= 0) 0L else System.currentTimeMillis() + minutes * 60000L
+        DeviceRuntime.store.set("pause_until", until.toString())
+        pauseInfo?.text = pauseText()
+    }
+
+    private fun quitApp() {
+        try {
+            startActivity(Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_HOME)
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+        } catch (_: Exception) {
+        }
+        finishAffinity()
     }
 
     override fun onStop() {
         super.onStop()
         if (verified) {
             verified = false
-            web?.destroy(); web = null
             form(false)
         }
     }

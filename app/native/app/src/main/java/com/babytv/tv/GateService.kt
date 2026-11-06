@@ -46,6 +46,12 @@ class GateService : Service() {
         val canOverlay = GateOverlay.canDraw(this)
         updateAnchor(canOverlay)
         if (!canOverlay) overlay.hide()
+        // 练习模式（默认）：不锁屏、不计观看时长；家长用家长页里的「休息」来控制
+        if (DeviceRuntime.store.config().getString("playMode") == "practice") {
+            wasUsing = false
+            hideAll()
+            return
+        }
         if (InputSupport.active) {
             wasUsing = false
             overlay.suspend(); WatchAccessibilityService.suspendGate()

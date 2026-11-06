@@ -175,6 +175,13 @@ class LearningEngine(private val store: LocalStore) {
 
     @Synchronized
     fun start(): JSONObject {
+        // 家长设置的「休息」时段：到点之前不出题，前端显示休息页并自动退出
+        val pauseUntil = store.get("pause_until").toLongOrNull() ?: 0L
+        val nowMs = System.currentTimeMillis()
+        if (pauseUntil > nowMs) {
+            return JSONObject().put("paused", true).put("pauseUntil", pauseUntil)
+                .put("minutesLeft", ((pauseUntil - nowMs + 59999) / 60000).toInt()).put("status", status())
+        }
         val st = status()
         val c = store.config()
         val feedbackId = store.get("review_feedback")
@@ -311,13 +318,14 @@ class LearningEngine(private val store: LocalStore) {
             val baseDone = if (mode == "streak") round.getInt("streak") >= round.getInt("target")
                 else round.getInt("answered") >= round.getInt("target")
             val passed = mode == "streak" || round.getInt("correct") >= ceil(round.getInt("target") * rules.getDouble("passRatio")).toInt()
-            val finished = mode != "practice" && baseDone && (!passed || number("extra_pool") == 0L)
+            // 练习模式也按「每轮题数」结束（默认 5 题），前端据此显示「本轮完成」并可退出
+            val finished = baseDone && (mode == "practice" || !passed || number("extra_pool") == 0L)
             val result = JSONObject().put("correct", correct).put("correctIndices", if (type == "text") JSONArray() else expected)
                 .put("answerText", if (type == "text") question.getJSONArray("answers").getString(0) else "")
                 .put("tip", question.optString("tip")).put("finished", finished).put("passed", finished && passed)
             if (finished) {
                 var grant = 0L
-                if (passed) {
+                if (passed && mode != "practice") {
                     val requested = if (rules.optBoolean("difficultyRewardEnabled")) round.getLong("earnedMs") else rules.getLong("sessionMinutes") * 60000
                     val budget = store.config().getLong("dailyMinutes") * 60000 - number("used_ms") - number("credit_ms")
                     grant = min(requested, budget.coerceAtLeast(0))

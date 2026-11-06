@@ -106,16 +106,34 @@
     font-size: 2.4vh; color: rgba(255,255,255,.45);
     opacity: 0; -webkit-transition: opacity .3s; transition: opacity .3s;
   }
-  /* 触摸设备按钮（电视遥控器上隐藏） */
-  #parent, #replayBtn { display: none; }
-  body.touch #parent, body.touch #replayBtn {
+  /* 鼠标/触摸设备显示按钮（纯遥控器电视上隐藏，避免误触） */
+  #parent, #replayBtn, #exitBtn { display: none; }
+  body.ctrl #parent, body.ctrl #replayBtn, body.ctrl #exitBtn {
     display: block; position: fixed; z-index: 5;
     background: rgba(255,255,255,.08); color: rgba(255,255,255,.72);
     border: 1px solid rgba(255,255,255,.18); border-radius: 999px;
     font-family: inherit; -webkit-appearance: none; outline: none;
   }
-  body.touch #parent { top: 2vh; right: 3vw; padding: 1.2vh 3vw; font-size: 2.2vh; }
-  body.touch #replayBtn { right: 3vw; bottom: 3vh; padding: 1.6vh 4vw; font-size: 2.4vh; }
+  body.ctrl #parent { top: 2vh; right: 3vw; padding: 1.2vh 3vw; font-size: 2.2vh; }
+  body.ctrl #replayBtn { right: 3vw; bottom: 3vh; padding: 1.6vh 4vw; font-size: 2.4vh; }
+  body.ctrl #exitBtn { left: 3vw; bottom: 3vh; padding: 1.6vh 4vw; font-size: 2.4vh; }
+  /* 本轮完成 / 家长设置的休息时段 */
+  #done {
+    display: none; position: fixed; z-index: 6;
+    left: 0; right: 0; top: 0; bottom: 0;
+    background: rgba(11,16,32,.94);
+    text-align: center;
+    padding: 26vh 6vw 0;
+  }
+  #done.show { display: block; }
+  #doneTitle { font-size: 4.6vh; font-weight: 800; color: #EAF0FF; }
+  #doneText { font-size: 2.4vh; color: rgba(255,255,255,.55); margin: 2.4vh 0 4vh; }
+  #done button {
+    display: inline-block; font-family: inherit; font-size: 3vh;
+    padding: 2vh 5vw; margin: 0 1.5vw; border: 0; border-radius: 999px;
+    color: #fff; background: #1C2440;
+  }
+  #doneExit { background: #35E0B0; color: #06231B; }
   /* ---------- 手机 / 平板适配（电视横屏不受影响） ---------- */
   @media (max-width: 900px) {
     #app { padding: 3vh 4vw; }
@@ -150,6 +168,15 @@
 </div>
 <button id="parent" type="button">家长</button>
 <button id="replayBtn" type="button">🔊 再听一遍</button>
+<button id="exitBtn" type="button">退出</button>
+<div id="done">
+  <div id="doneTitle">太棒了！这一轮完成啦</div>
+  <div id="doneText"></div>
+  <div>
+    <button id="doneAgain" type="button">再学一轮</button>
+    <button id="doneExit" type="button">休息一下</button>
+  </div>
+</div>
 <div id="toast"></div>
 
 <script>
@@ -167,9 +194,18 @@
   var hintBox = document.getElementById("hint");
   var parentBtn = document.getElementById("parent");
   var replayBtn = document.getElementById("replayBtn");
+  var exitBtn = document.getElementById("exitBtn");
+  var doneBox = document.getElementById("done");
+  var doneTitle = document.getElementById("doneTitle");
+  var doneText = document.getElementById("doneText");
+  var doneAgain = document.getElementById("doneAgain");
+  var doneExit = document.getElementById("doneExit");
 
   var isTouch = !!('ontouchstart' in window) || (navigator.maxTouchPoints || 0) > 0;
-  if (isTouch) document.body.className += " touch";
+  var finePointer = false;
+  try { finePointer = !!(window.matchMedia && window.matchMedia("(pointer: fine)").matches); } catch (e) { }
+  // 有鼠标/触屏就显示「家长 / 再听一遍 / 退出」按钮；纯遥控器电视保持干净界面
+  if (isTouch || finePointer) document.body.className += " ctrl";
 
   // ---------- 原生桥 ----------
   function nativeCall(name, args) {
@@ -201,6 +237,62 @@
   function toast(text) {
     toastBox.textContent = text || "";
     toastBox.style.opacity = text ? "1" : "0";
+  }
+
+  // ---------- 退出 / 本轮完成 / 家长设置的休息时段 ----------
+  function exitApp() {
+    hideDone();
+    nativeCall("exitToLauncher");
+    try { window.close(); } catch (e) { }   // 纯浏览器（没有原生壳）时尽量关掉自己
+  }
+
+  var panelTimer = null;
+  var panelKind = "";
+
+  function hideDone() {
+    if (panelTimer) { clearInterval(panelTimer); panelTimer = null; }
+    if (doneBox) doneBox.className = "";
+    panelKind = "";
+  }
+
+  function panelShown() {
+    return !!(doneBox && doneBox.className === "show");
+  }
+
+  // 遥控器在完成页/休息页按 OK：完成页继续下一轮，休息页直接退出
+  function panelConfirm() {
+    if (!panelShown()) return false;
+    if (panelKind === "rest") exitApp();
+    else { hideDone(); nextRound(); }
+    return true;
+  }
+
+  // kind = "done"：本轮答完；kind = "rest"：家长设置的休息时段内
+  function showPanel(kind, minutesLeft) {
+    if (!doneBox) return;
+    hideDone();
+    // 收起选项，避免孩子隔着完成页点到上一题的残留卡片
+    optionsBox.innerHTML = "";
+    cards = [];
+    var rest = kind === "rest";
+    panelKind = kind;
+    doneTitle.textContent = rest ? "休息时间到啦" : "太棒了！这一轮完成啦";
+    if (doneAgain) doneAgain.style.display = rest ? "none" : "";
+    if (doneExit) doneExit.textContent = rest ? "知道了" : "休息一下";
+    var seconds = rest ? 10 : 15;
+    function paint() {
+      var base = rest
+        ? "还有约 " + (minutesLeft || 0) + " 分钟休息时间，先去看会儿电视吧"
+        : "这一轮已经学完，休息一下眼睛吧";
+      doneText.textContent = base + "（" + seconds + " 秒后自动退出）";
+    }
+    paint();
+    doneBox.className = "show";
+    panelTimer = setInterval(function () {
+      seconds = seconds - 1;
+      if (seconds <= 0) { exitApp(); return; }
+      paint();
+    }, 1000);
   }
 
   // 用 XHR 而不是 fetch：Android 7 自带 WebView 可能低于 Chrome 57
@@ -237,6 +329,7 @@
 
   function render(r) {
     round = r;
+    hideDone();
     // 关键：答题成功时服务端会直接返回下一题（result.next），走的是 render 而不是 nextRound，
     // 这里必须解除锁定，否则答完第一题后 locked 永远为 true，第二题遥控器/触摸全部失效。
     locked = false;
@@ -323,6 +416,7 @@
     locked = false;
     failed = 0;
     post("/api/quiz/start", {}, function (data) {
+      if (data.paused) { showPanel("rest", data.minutesLeft || 0); return; }
       if (data.question) { render(data); return; }
       if (data.next && data.next.question) { render(data.next); return; }
       if (data.pending) { toast("等待家长批改"); return; }
@@ -380,6 +474,7 @@
         }
       }
       setTimeout(function () {
+        if (result.finished) { showPanel("done", 0); return; }   // 本轮答完：显示完成页并可退出
         if (result.next && result.next.question) render(result.next);
         else nextRound();
       }, correct ? 1500 : 3600);
@@ -395,9 +490,9 @@
       if (dir === "left") moveFocus(-1);
       else if (dir === "right") moveFocus(1);
     },
-    select: function () { choose(focus); },
+    select: function () { if (!panelConfirm()) choose(focus); },
     replay: function () { replay(); },
-    back: function () { nativeCall("exitToLauncher"); }
+    back: function () { exitApp(); }
   };
 
   // 再听一遍：重播当前题干（遥控器 MENU 键）
@@ -410,8 +505,9 @@
     var k = e.key;
     if (k === "ArrowLeft") { e.preventDefault(); moveFocus(-1); }
     else if (k === "ArrowRight") { e.preventDefault(); moveFocus(1); }
-    else if (k === "Enter" || k === " ") { e.preventDefault(); choose(focus); }
+    else if (k === "Enter" || k === " ") { e.preventDefault(); if (!panelConfirm()) choose(focus); }
     else if (k === "m" || k === "M") { e.preventDefault(); replay(); }
+    else if (k === "Escape") { e.preventDefault(); exitApp(); }
   });
 
   window.SOTV_RESUME = function () { if (!round) nextRound(); };
@@ -429,6 +525,9 @@
 
   if (replayBtn) replayBtn.onclick = function (e) { if (e) e.preventDefault(); replay(); };
   if (parentBtn) parentBtn.onclick = function (e) { if (e) e.preventDefault(); openParentPanel(); };
+  if (exitBtn) exitBtn.onclick = function (e) { if (e) e.preventDefault(); exitApp(); };
+  if (doneAgain) doneAgain.onclick = function (e) { if (e) e.preventDefault(); hideDone(); nextRound(); };
+  if (doneExit) doneExit.onclick = function (e) { if (e) e.preventDefault(); exitApp(); };
 
   // 长按题干 1.5 秒也能进家长面板
   var holdTimer = null;

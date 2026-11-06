@@ -220,6 +220,9 @@ class LanServer(
 
         
         if (method != "GET") return json(out, 405, err("method_not_allowed"))
+        // 家长面板页面里用的是 ./assets/xxx 相对路径：/admin 会被浏览器解析成 /assets/，整页空白。
+        // 统一跳到带斜杠的 /admin/，资源才会落在 /admin/assets/ 下。
+        if (path == "/admin" || path == "/admin/index.html") return replyRedirect(out, "/admin/")
         serveStatic(path, out)
     }
 
@@ -283,6 +286,12 @@ class LanServer(
         head.append("\r\n")
         out.write(head.toString().toByteArray())
         if (body.isNotEmpty()) out.write(body)
+        out.flush()
+    }
+
+    private fun replyRedirect(out: OutputStream, location: String) {
+        val head = "HTTP/1.1 302 Found\r\nLocation: $location\r\nContent-Length: 0\r\nConnection: close\r\nCache-Control: no-store\r\n\r\n"
+        out.write(head.toByteArray())
         out.flush()
     }
 
