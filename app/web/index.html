@@ -62,6 +62,14 @@
     transition: transform .12s ease, border-color .12s ease, box-shadow .12s ease;
   }
   .card + .card { margin-left: 4vw; }
+  .card .label {
+    display: block; width: 100%;
+    text-align: center;
+    line-height: 1.05;
+    white-space: normal;
+    word-break: normal;
+    overflow-wrap: normal; word-wrap: normal;
+  }
   .card.en { font-size: 7.2vw; }
   .card.focused {
     border-color: #35E0B0;
@@ -94,8 +102,16 @@
     font-size: 2.4vh; color: rgba(255,255,255,.45);
     opacity: 0; -webkit-transition: opacity .3s; transition: opacity .3s;
   }
-  /* 触摸设备按钮（电视上隐藏） */
+  /* 触摸设备按钮（电视遥控器上隐藏） */
   #parent, #replayBtn { display: none; }
+  body.touch #parent, body.touch #replayBtn {
+    display: block; position: fixed; z-index: 5;
+    background: rgba(255,255,255,.08); color: rgba(255,255,255,.72);
+    border: 1px solid rgba(255,255,255,.18); border-radius: 999px;
+    font-family: inherit; -webkit-appearance: none; outline: none;
+  }
+  body.touch #parent { top: 2vh; right: 3vw; padding: 1.2vh 3vw; font-size: 2.2vh; }
+  body.touch #replayBtn { right: 3vw; bottom: 3vh; padding: 1.6vh 4vw; font-size: 2.4vh; }
   /* ---------- 手机 / 平板适配（电视横屏不受影响） ---------- */
   @media (max-width: 900px) {
     #app { padding: 3vh 4vw; }
@@ -113,14 +129,6 @@
     .card + .card { margin-left: 2.5vw; }
     .card.en { font-size: 5.5vw; }
     #hint { font-size: 2vh; margin-top: 2.5vh; letter-spacing: .05em; }
-    #parent, #replayBtn {
-      display: block; position: fixed; z-index: 5;
-      background: rgba(255,255,255,.08); color: rgba(255,255,255,.72);
-      border: 1px solid rgba(255,255,255,.18); border-radius: 999px;
-      font-family: inherit; -webkit-appearance: none; outline: none;
-    }
-    #parent { top: 2vh; right: 3vw; padding: 1.2vh 3vw; font-size: 2.2vh; }
-    #replayBtn { right: 3vw; bottom: 3vh; padding: 1.6vh 4vw; font-size: 2.4vh; }
   }
   @media (max-width: 900px) and (orientation: landscape) {
     #stem { font-size: 7vh; }
@@ -156,9 +164,8 @@
   var parentBtn = document.getElementById("parent");
   var replayBtn = document.getElementById("replayBtn");
 
-  function isCompact() {
-    try { return !!(window.matchMedia && window.matchMedia("(max-width: 900px)").matches); } catch (e) { return false; }
-  }
+  var isTouch = !!('ontouchstart' in window) || (navigator.maxTouchPoints || 0) > 0;
+  if (isTouch) document.body.className += " touch";
 
   // ---------- 原生桥 ----------
   function nativeCall(name, args) {
@@ -219,7 +226,10 @@
     for (var i = 0; i < list.length; i++) {
       var el = document.createElement("div");
       el.className = "card" + (isEnglish(list[i]) ? " en" : "");
-      el.textContent = list[i];
+      var label = document.createElement("span");
+      label.className = "label";
+      label.textContent = list[i];
+      el.appendChild(label);
       el.setAttribute("role", "option");
       el.onclick = (function (index) { return function () { choose(index); }; })(i);
       optionsBox.appendChild(el);
@@ -228,8 +238,36 @@
 
     focus = 0;
     paintFocus();
+    layoutCards();
     play(audioName(q, -1));   // 题目一出现就朗读题干
   }
+
+  // 让长单词/长句自动缩到卡片内（电视、平板、手机共用）
+  function fitCard(el) {
+    var label = el.querySelector(".label");
+    if (!label) return;
+    el.style.fontSize = "";
+    var cs = window.getComputedStyle(el);
+    var size = parseFloat(cs.fontSize) || 40;
+    var boxH = el.clientHeight - 8;
+    var guard = 0;
+    while ((label.scrollWidth > el.clientWidth + 1 || label.scrollHeight > boxH + 1) && size > 10 && guard < 30) {
+      size = Math.max(10, size * 0.9);
+      el.style.fontSize = size + "px";
+      guard++;
+    }
+  }
+
+  function layoutCards() {
+    if (!cards.length) return;
+    for (var i = 0; i < cards.length; i++) fitCard(cards[i]);
+  }
+
+  var resizeTimer = null;
+  window.addEventListener("resize", function () {
+    if (resizeTimer) clearTimeout(resizeTimer);
+    resizeTimer = setTimeout(layoutCards, 200);
+  });
 
   function audioName(q, index) {
     if (!q || !q.id) return "";
@@ -352,7 +390,7 @@
   window.SOTV_RESUME = function () { if (!round) nextRound(); };
 
   // ---------- 手机 / 平板：触摸操作 ----------
-  if (isCompact() && hintBox) hintBox.textContent = "点选项作答 · 长按题干进家长";
+  if (isTouch && hintBox) hintBox.textContent = "点选项作答 · 长按题干进家长";
 
   function openParentPanel() {
     if (window.SOTVNative && typeof window.SOTVNative.openParent === "function") {
