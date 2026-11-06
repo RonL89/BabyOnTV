@@ -237,6 +237,10 @@
 
   function render(r) {
     round = r;
+    // 关键：答题成功时服务端会直接返回下一题（result.next），走的是 render 而不是 nextRound，
+    // 这里必须解除锁定，否则答完第一题后 locked 永远为 true，第二题遥控器/触摸全部失效。
+    locked = false;
+    failed = 0;
     var q = r.question || r;
     stem.textContent = q.q || "";
     optionsBox.innerHTML = "";

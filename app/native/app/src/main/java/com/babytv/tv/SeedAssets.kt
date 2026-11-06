@@ -6,8 +6,11 @@ import org.json.JSONObject
 
 object SeedAssets {
     private fun signature(arr: JSONArray): String {
-        val first = if (arr.length() > 0) arr.getJSONObject(0).optString("q") else ""
-        return arr.length().toString() + "|" + first.hashCode()
+        // 题数 + 首题 + 末题：只比首题的话，换了一整套题但题数相同时设备不会重建题库
+        if (arr.length() == 0) return "0"
+        val first = arr.getJSONObject(0).optString("q")
+        val last = arr.getJSONObject(arr.length() - 1).optString("q")
+        return arr.length().toString() + "|" + first.hashCode() + "|" + last.hashCode()
     }
 
     fun ensureQuestions(context: Context, store: LocalStore) {
