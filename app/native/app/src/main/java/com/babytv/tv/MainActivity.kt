@@ -51,6 +51,7 @@ open class MainActivity : Activity() {
 
     override fun onStop() {
         super.onStop()
+        AudioPlayer.stop()
         if (DeviceBridge.isTv(this) && ::web.isInitialized && !webReleased) {
             (web.parent as? android.view.ViewGroup)?.removeView(web)
             web.destroy()
