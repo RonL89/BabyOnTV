@@ -1,5 +1,8 @@
 # docs/
 
+> ⚠️ **存档说明**：本目录是上游 [chadyi/StudyOnTV](https://github.com/chadyi/StudyOnTV) 的原始文档与截图，保留用于追溯来源。
+> BabyTV 的实际用法请以仓库根目录的 [README.md](../README.md) 为准；文中出现的「题了个题 / StudyOnTV」为上游旧名。
+
 README 里引用的图片资源。
 
 | 文件 | 说明 |
