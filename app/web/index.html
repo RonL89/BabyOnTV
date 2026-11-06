@@ -106,16 +106,23 @@
     font-size: 2.4vh; color: rgba(255,255,255,.45);
     opacity: 0; -webkit-transition: opacity .3s; transition: opacity .3s;
   }
-  /* 鼠标/触摸设备显示按钮（纯遥控器电视上隐藏，避免误触） */
-  #parent, #replayBtn { display: none; }
-  body.ctrl #parent, body.ctrl #replayBtn {
+  /* 角按钮：遥控器、鼠标、触摸都能选中（遥控器 ↑/↓ 进入，OK 触发） */
+  #parent, #replayBtn {
     display: block; position: fixed; z-index: 5;
-    background: rgba(255,255,255,.08); color: rgba(255,255,255,.72);
-    border: 1px solid rgba(255,255,255,.18); border-radius: 999px;
+    background: rgba(255,255,255,.08); color: rgba(255,255,255,.6);
+    border: 2px solid rgba(255,255,255,.16); border-radius: 999px;
     font-family: inherit; -webkit-appearance: none; outline: none;
+    -webkit-transition: -webkit-transform .12s ease, border-color .12s ease, color .12s ease;
+    transition: transform .12s ease, border-color .12s ease, color .12s ease;
   }
-  body.ctrl #parent { top: 2vh; right: 3vw; padding: 1.2vh 3vw; font-size: 2.2vh; }
-  body.ctrl #replayBtn { right: 3vw; bottom: 3vh; padding: 1.6vh 4vw; font-size: 2.4vh; }
+  #parent { top: 2vh; right: 3vw; padding: 1.2vh 3vw; font-size: 2.2vh; }
+  #replayBtn { right: 3vw; bottom: 3vh; padding: 1.6vh 4vw; font-size: 2.4vh; }
+  #parent.focused, #replayBtn.focused {
+    border-color: #35E0B0; color: #EAF0FF;
+    background: rgba(53,224,176,.18);
+    -webkit-transform: scale(1.08); transform: scale(1.08);
+    box-shadow: 0 0 2.4vh rgba(53,224,176,.55);
+  }
   /* 本轮完成 / 家长设置的休息时段 */
   #done {
     display: none; position: fixed; z-index: 6;
@@ -174,6 +181,8 @@
   var round = null;      // 当前一轮（id / nonce / question）
   var cards = [];
   var focus = 0;
+  var zone = "card";      // "card"：选项卡片；"action"：家长 / 再听一遍
+  var actionIndex = 0;    // 0 = 家长，1 = 再听一遍
   var locked = false;    // 判题与播放反馈期间锁定输入
   var failed = 0;
   var stem = document.getElementById("stem");
@@ -349,6 +358,8 @@
     }
 
     focus = 0;
+    zone = "card";
+    actionIndex = 0;
     paintFocus();
     layoutCards();
     play(audioName(q, -1));   // 题目一出现就朗读题干
@@ -386,21 +397,54 @@
     return index < 0 ? q.id + ".mp3" : q.id + "_opt_" + index + ".mp3";
   }
 
+  function actionButtons() { return [parentBtn, replayBtn]; }
+
   function paintFocus() {
     for (var i = 0; i < cards.length; i++) {
-      var on = (i === focus);
+      var on = (zone === "card" && i === focus);
       if (on) cards[i].className = cards[i].className.replace(/\s*focused/g, "") + " focused";
       else cards[i].className = cards[i].className.replace(/\s*focused/g, "");
+    }
+    var acts = actionButtons();
+    for (var j = 0; j < acts.length; j++) {
+      if (!acts[j]) continue;
+      if (zone === "action" && j === actionIndex) acts[j].className = acts[j].className.replace(/\s*focused/g, "") + " focused";
+      else acts[j].className = acts[j].className.replace(/\s*focused/g, "");
     }
   }
 
   function moveFocus(delta) {
     if (locked || !cards.length) return;
+    if (zone === "action") {          // 在「家长 / 再听一遍」之间左右切换
+      actionIndex = actionIndex === 0 ? 1 : 0;
+      paintFocus();
+      return;
+    }
     var next = focus + delta;
     if (next < 0 || next >= cards.length) return;
     focus = next;
     paintFocus();
     play(audioName(round.question, focus));  // 只有左右切换才读选项
+  }
+
+  // 遥控器上下：选项卡片 ⇄ 家长（↑）/ 再听一遍（↓）
+  function moveZone(dir) {
+    if (locked || panelShown() || !cards.length) return;
+    if (dir === "up") {
+      if (zone === "card") { zone = "action"; actionIndex = 0; }
+      else if (actionIndex === 0) zone = "card";
+      else actionIndex = 0;
+    } else if (dir === "down") {
+      if (zone === "card") { zone = "action"; actionIndex = 1; }
+      else if (actionIndex === 1) zone = "card";
+      else actionIndex = 1;
+    }
+    paintFocus();
+  }
+
+  function activateAction() {
+    if (actionIndex === 0) openParentPanel();
+    else replay();
   }
 
   // ---------- 取题 ----------
@@ -481,8 +525,13 @@
     move: function (dir) {
       if (dir === "left") moveFocus(-1);
       else if (dir === "right") moveFocus(1);
+      else if (dir === "up" || dir === "down") moveZone(dir);
     },
-    select: function () { if (!panelConfirm()) choose(focus); },
+    select: function () {
+      if (panelConfirm()) return;
+      if (zone === "action") { activateAction(); return; }
+      choose(focus);
+    },
     replay: function () { replay(); },
     // 遥控器返回键不再退出：必须答对 5 题，或由家长在家长页退出
     back: function () { toast("答对 5 题就可以去看电视啦"); }
@@ -498,7 +547,14 @@
     var k = e.key;
     if (k === "ArrowLeft") { e.preventDefault(); moveFocus(-1); }
     else if (k === "ArrowRight") { e.preventDefault(); moveFocus(1); }
-    else if (k === "Enter" || k === " ") { e.preventDefault(); if (!panelConfirm()) choose(focus); }
+    else if (k === "ArrowUp") { e.preventDefault(); moveZone("up"); }
+    else if (k === "ArrowDown") { e.preventDefault(); moveZone("down"); }
+    else if (k === "Enter" || k === " ") {
+      e.preventDefault();
+      if (panelConfirm()) return;
+      if (zone === "action") { activateAction(); return; }
+      choose(focus);
+    }
     else if (k === "m" || k === "M") { e.preventDefault(); replay(); }
   });
 
@@ -506,6 +562,7 @@
 
   // ---------- 手机 / 平板：触摸操作 ----------
   if (isTouch && hintBox) hintBox.textContent = "点选项作答 · 长按题干进家长";
+  else if (hintBox) hintBox.textContent = "← → 选择　↑ 家长　↓ 再听一遍　OK 确认";
 
   function openParentPanel() {
     if (window.SOTVNative && typeof window.SOTVNative.openParent === "function") {

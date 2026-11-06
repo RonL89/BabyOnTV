@@ -39,6 +39,7 @@ SHIM = """
   window.SOTVNative = {
     playAudio: function (file) {
       if (!file) return;
+      window.__BTV_PLAYS = (window.__BTV_PLAYS || 0) + 1;
       var a = player();
       try { a.pause(); } catch (e) {}
       a.src = "/audio/" + encodeURIComponent(file);
@@ -48,6 +49,7 @@ SHIM = """
     },
     stopAudio: function () { if (audio) { try { audio.pause(); } catch (e) {} } },
     apiToken: function () { return "preview"; },
+    openParent: function () { window.__BTV_PARENT = true; },
     exitToLauncher: function () { window.__BTV_EXITED = true; }
   };
 })();

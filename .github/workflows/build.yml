@@ -156,6 +156,7 @@ jobs:
             - 退出：孩子端没有退出按钮、遥控器 BACK 不放行；家长页可「退出应用」，或设「休息 1/2/4 小时」
             - 家长：家长页可设「休息 1 / 2 / 4 小时」，期间孩子端不出题；手机打开 http://电视IP:8099/admin/ 管理
             - 修复：手机浏览器打开 /admin 空白（现在会 301 到 /admin/，静态资源才找得到）
+            - 遥控器：↑ 选中「家长」、↓ 选中「再听一遍」、OK 触发；家长页按钮有焦点高亮，密码框聚焦有边框
             - 适配：电视 Android 5.0+（minSdk 21，海信 VIDAA 等）、手机/平板 Android 5.0+
             - 包名：电视 `com.babytv.tv`，手机/平板 `com.babytv.mobile`（可同时安装）
             - 签名：${{ steps.keystore.outputs.signed == 'true' && 'release keystore' || 'debug（未配置密钥）' }}

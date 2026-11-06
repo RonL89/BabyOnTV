@@ -10,8 +10,6 @@ import android.widget.EditText
 import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
-import android.graphics.drawable.GradientDrawable
-import android.webkit.WebView
 
 class ParentActivity : Activity() {
     private var verified = false
@@ -55,9 +53,7 @@ class ParentActivity : Activity() {
         content.addView(error)
         val submit = Button(this).apply {
             text = if (setup) "保存密码" else "验证并打开连接页"
-            backgroundTintList = null
-            background = GradientDrawable(GradientDrawable.Orientation.LEFT_RIGHT, intArrayOf(0xFFFFB020.toInt(), 0xFFFF6A1F.toInt())).apply { cornerRadius = dp(12).toFloat() }
-            setTextColor(0xFF111111.toInt())
+            learningStyle(primary = true)
         }
         content.addView(submit, LinearLayout.LayoutParams(-1, dp(56)))
         submit.setOnClickListener {
