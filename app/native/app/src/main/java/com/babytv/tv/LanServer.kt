@@ -95,19 +95,21 @@ class LanServer(
 
                 val out = c.getOutputStream()
                 if (method == "OPTIONS") return reply(out, 204, null, null)
-                route(method, path, query, headers, body, out)
+                val local = c.inetAddress?.isLoopbackAddress ?: false
+                route(method, path, query, headers, body, out, local)
             } catch (e: Exception) {
                 
             }
         }
     }
 
-    private fun route(method: String, path: String, query: String, headers: Map<String, String>, body: String, out: OutputStream) {
+    private fun route(method: String, path: String, query: String, headers: Map<String, String>, body: String, out: OutputStream, local: Boolean) {
         val q = if (query.isEmpty()) emptyMap() else query.split("&").associate {
             val kv = it.split("=", limit = 2)
             kv[0] to java.net.URLDecoder.decode(kv.getOrElse(1) { "" }, "UTF-8")
         }
-        val deviceAccess = headers["x-device-token"] == AdminAuth.deviceToken
+        // 本机 WebView 直接放行；手机/平板浏览器用页面注入的令牌
+        val deviceAccess = local || headers["x-device-token"] == AdminAuth.deviceToken
         val token = headers["authorization"]?.removePrefix("Bearer ") ?: headers["x-admin-token"]
         if (path == "/api/auth" && method == "POST") {
             val value = try { JSONObject(body).optString("passphrase") } catch (e: Exception) { "" }
