@@ -24,7 +24,7 @@ PAUSE_MINUTES = int(os.environ.get("PREVIEW_PAUSE_MINUTES", "0"))
 TARGET_PER_ROUND = 5        # 与 App 的 questionsPerRound 默认值一致
 
 DATA = json.load(open(SEED, encoding="utf-8"))
-STATE = {"round": None, "stats": {"total": 0, "right": 0}, "answered": 0}
+STATE = {"round": None, "stats": {"total": 0, "right": 0}, "answered": 0, "correct": 0}
 RECENT = deque(maxlen=30)   # 最近 30 题不重复（与 App 内 LearningEngine 一致）
 RETRY = []                  # 错题队列：[题目 id, 还要隔几题]
 
@@ -159,11 +159,15 @@ class Handler(BaseHTTPRequestHandler):
             if not correct and not any(item[0] == q["id"] for item in RETRY):
                 RETRY.append([q["id"], 5])   # 隔 5 题再出现
             STATE["answered"] += 1
-            # 与 App 一致：练习模式也按每轮 5 题结束，前端会显示「本轮完成」并可退出
-            if STATE["answered"] >= TARGET_PER_ROUND:
+            if correct:
+                STATE["correct"] += 1
+            # 与 App 一致：练习模式累计答对 5 题才结束（答错继续出题，不结束这一轮）
+            if STATE["correct"] >= TARGET_PER_ROUND:
                 STATE["answered"] = 0
+                STATE["correct"] = 0
                 STATE["round"] = None
-                return self._json({"correct": correct, "correctIndices": [answer], "finished": True})
+                return self._json({"correct": correct, "correctIndices": [answer],
+                                   "finished": True, "passed": True})
             nxt = new_round()
             STATE["round"] = nxt
             return self._json({

@@ -317,9 +317,11 @@ class LearningEngine(private val store: LocalStore) {
                 .put("difficulty", question.optInt("difficulty", 2)).put("extra", wasExtra).put("mode", mode))
             val baseDone = if (mode == "streak") round.getInt("streak") >= round.getInt("target")
                 else round.getInt("answered") >= round.getInt("target")
+            // 练习模式：累计答对 5 题才算完成（答错不出完成页，继续出题）
+            val practiceDone = mode == "practice" && round.getInt("correct") >= round.getInt("target")
             val passed = mode == "streak" || round.getInt("correct") >= ceil(round.getInt("target") * rules.getDouble("passRatio")).toInt()
-            // 练习模式也按「每轮题数」结束（默认 5 题），前端据此显示「本轮完成」并可退出
-            val finished = baseDone && (mode == "practice" || !passed || number("extra_pool") == 0L)
+            val finished = if (mode == "practice") practiceDone
+                else baseDone && (!passed || number("extra_pool") == 0L)
             val result = JSONObject().put("correct", correct).put("correctIndices", if (type == "text") JSONArray() else expected)
                 .put("answerText", if (type == "text") question.getJSONArray("answers").getString(0) else "")
                 .put("tip", question.optString("tip")).put("finished", finished).put("passed", finished && passed)
