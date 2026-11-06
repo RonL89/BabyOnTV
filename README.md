@@ -1,6 +1,6 @@
 # BabyTV
 
-面向 **3~6 岁** 的电视端启蒙应用：**识字 + 英语启蒙 + 10 以内加减法**。
+面向 **3~6 岁** 的电视端启蒙应用：**识字 + 英语启蒙 + 书写练习**。
 所有题目语音**预合成离线音频**打包进 APK，不联网、不依赖电视自带 TTS 引擎；界面只有巨大字块，孩子用遥控器 `←` `→` 选、`OK` 确认即可。
 
 > 本项目基于 [chadyi/StudyOnTV](https://github.com/chadyi/StudyOnTV) 二次开发，原项目是「答题解锁电视时间」的家长管控工具，本仓库将其改造为幼儿启蒙形态。协议与来源见 [一、开源协议与来源标注](#一开源协议与来源标注)。
@@ -12,12 +12,12 @@
 | 能力 | 实现 |
 | :-- | :-- |
 | 纯语音朗读 | 题干出现即自动播报；`←/→` 切换选项时播报该选项；`OK` 后播报「答对了，你真棒 / 再想一想哦」 |
-| 离线音频包 | 1102 个 mp3（约 9.9 MB）随 APK 打包，`MediaPlayer` 直读 assets，**零网络、零系统 TTS** |
+| 离线音频包 | 832 个 mp3（约 7.8 MB）随 APK 打包，`MediaPlayer` 直读 assets，**零网络、零系统 TTS** |
 | 音色 | 中文 `zh-CN-XiaoxiaoNeural`（温柔女声），英文 `en-US-JennyNeural`（亲切女声），由脚本按文本自动切换 |
 | 极简大字 | 题干 `5.2vh`、选项 `12vw` 的巨大卡片；无配图、无多余文字 |
 | 遥控器交互 | `←` `→` 切焦点，`OK/Enter` 确认；兼容 `KEYCODE_DPAD_CENTER` 与 `KEYCODE_ENTER` |
 | 老电视兼容 | `minSdk 21`（Android 5.0），实测目标 Android 7.0 / VIDAA；前端已规避 `flex gap`、`fetch` 等新特性 |
-| 题库 | 275 题：识字 100、英语 96、数学 79；固定 ID 与音频一一对应 |
+| 题库 | 210 题：识字 100、英语 100、书写 10；固定 ID 与音频一一对应 |
 | 出题去重 | 最近 **30 题不重复**（`recent_qids`），小题库自动重置队列 |
 | 错题重现 | 答错后**隔 5 题**再出（`retry_qids`），间隔复习（`spacedRepetitionEnabled`）默认开启 |
 | 复听 / 纠错 | 遥控器 `MENU`（或 `PLAY/PAUSE`）重播题干；答错后高亮并**朗读正确选项** |
@@ -32,7 +32,7 @@
 | applicationId | 电视 `com.babytv.tv`；手机/平板 `com.babytv.mobile`（debug 构建带 `.debug` 后缀，可同时安装） |
 | 签名 | release 包使用自有 keystore（PKCS12），CI 从 GitHub Secrets 注入 |
 | minSdk / targetSdk / compileSdk | `21` / `34` / `36` |
-| APK 体积 | 电视版约 12 MB；手机版约 12 MB（各含 1102 个离线音频） |
+| APK 体积 | 电视版约 10 MB；手机版约 10 MB（各含 832 个离线音频） |
 | 题库文件 | `data/seed.json` |
 | 音频目录 | `data/audio/`（构建时同步进 `assets/audio/`） |
 
@@ -66,8 +66,8 @@ BabyTV/
 │        ├─ res/values/strings.xml   ← 应用名 BabyTV / 无障碍文案
 │        └─ assets/                  ← 构建时自动生成：web/ admin/ audio/ questions.json
 ├─ data/
-│  ├─ seed.json                      ← 【题库唯一入口】275 题
-│  ├─ audio/                         ← 【离线语音】1102 个 mp3，随仓库提交
+│  ├─ seed.json                      ← 【题库唯一入口】210 题
+│  ├─ audio/                         ← 【离线语音】832 个 mp3，随仓库提交
 │  └─ banks/open-play.json           ← 上游示例题库（仅文档引用）
 ├─ admin/                            ← 家长管理面板（编译产物，LAN 内网访问）
 ├─ shared/                           ← KaTeX 等前端共享资源
@@ -194,13 +194,13 @@ python tools/preview.py
 | `q` | ✅ | 题干，会被朗读。**不要写 `//` 注释**（不是合法 JSON） |
 | `a` | ✅ | 选项数组，2~3 个最佳（电视屏宽） |
 | `k` | ✅ | 正确选项下标，**从 0 开始** |
-| `subject` | 建议 | `识字` / `英语` / `数学`，用于后台统计筛选 |
+| `subject` | 建议 | `识字` / `英语` / `书写`，用于后台统计筛选 |
 | `difficulty` / `tip` / `level` | 否 | 难度星级 / 解析 / 年龄段 |
 
 规则：
 1. **顺序即 ID**：第 i 题（从 0 开始）对应音频 `q_i.mp3` 与 `q_i_opt_j.mp3`。
 2. **增删题目后必须重跑** `python scripts/generate_audio.py`（脚本会清空 `data/audio` 全量重建）。
-3. 题库变化后，已装设备重新安装 APK 会自动重建题库（`SeedAssets` 用「题数 + 首题哈希」做签名比对）。
+3. 题库变化后，已装设备重新安装 APK 会自动重建题库（`SeedAssets` 用「题数 + 首题哈希 + 末题哈希」做签名比对）。
 4. 用 Python 校验一遍再提交：
    ```powershell
    python -c "import json;d=json.load(open('data/seed.json',encoding='utf-8'));print(len(d),'题 OK')"
@@ -213,7 +213,7 @@ python scripts/generate_audio.py
 ```
 
 - 中文（含汉字）→ `zh-CN-XiaoxiaoNeural`；纯英文单词 → `en-US-JennyNeural`；纯数字/符号 → 中文音色（`12` 读「十二」）。
-- 并发 8，275 题约 1102 个文件、2~4 分钟。
+- 并发 8，210 题约 832 个文件、3~5 分钟。
 - 每次运行**先清空** `data/audio/*.mp3`，保证不会残留改题前的旧语音。
 - 想换音色：改脚本顶部 `ZH_VOICE` / `EN_VOICE`（如童声 `zh-CN-XiaoyiNeural`），重跑即可。
 
@@ -426,8 +426,8 @@ adb logcat -v time | Select-String -Pattern "babytv|AndroidRuntime|chromium"
 
 | 检查项 | 结论 |
 | :-- | :-- |
-| 题库 JSON 合法性 | ✅ 275 题全部可解析（曾含 `//` 注释，已清理） |
-| 音频完整性 | ✅ 1102 个文件，脚本与 CI 双重校验 |
+| 题库 JSON 合法性 | ✅ 210 题全部可解析（曾含 `//` 注释，已清理） |
+| 音频完整性 | ✅ 832 个文件，脚本与 CI 双重校验 |
 | 题↔音对应 | ✅ 固定 ID `q_<序号>`，不再依赖随机顺序 |
 | assets 播放 | ✅ 已设置 `noCompress += "mp3"` + 缓存兜底 |
 | 老 WebView 兼容 | ✅ 已移除 `flex gap`、`fetch`/`Promise` 依赖（Android 7 自带 WebView 常见 Chrome 51~60） |
@@ -491,13 +491,15 @@ adb logcat -v time | Select-String -Pattern "babytv|AndroidRuntime|chromium"
 - ✅ `versionCode` 取 CI run number，`versionName` 自动递增
 - ✅ 家长面板电视端直显 `http://IP:8099/admin`（免扫码）
 - ✅ 手机 / 平板版：触摸作答、竖屏/横屏布局、底部重听、右上「家长」入口、独立安装包
+- ✅ 修复「答完第一题后界面完全卡死」：答题成功直接渲染下一题时没有解除输入锁，遥控器与触摸均失效
+- ✅ 题库换新：210 题（识字 100 / 英语 100 / 书写 10），离线音频全量重生成（832 个）
 
 可以继续做：
 
 1. **看图选字**：选项换成图片（需加图片资源 + 打包流程 + 音频配套）。
 2. **学习周报**：用现有 `events` 表 + `/api/history` 生成家长可见的图表。
 3. **语音调速/重读最后一句**：低龄孩子常需要更慢的语速。
-4. **专项模式**：按 `subject` 只练识字/英语/数学，遥控器长按切换。
+4. **专项模式**：按 `subject` 只练识字/英语/书写，遥控器长按切换。
 5. **家长面板二维码回退**：已有直显网址，若想扫码可再补一个本地生成的二维码（不依赖外网）。
 6. **屏幕时间管控适配 VIDAA**：确认无障碍/悬浮窗在海信上的实际可用性。
 7. **多设备同步**：把学习进度导出/导入（U 盘 JSON），换电视不丢进度。
