@@ -100,7 +100,7 @@
 <div id="app">
   <div id="stem">准备开始…</div>
   <div id="options"></div>
-  <div id="hint">← → 选择　OK 确认</div>
+  <div id="hint">← → 选择　OK 确认　MENU 再听一遍</div>
 </div>
 <div id="toast"></div>
 
@@ -259,10 +259,22 @@
       var correct = !!result.correct;
       cards[index].className += correct ? " correct" : " wrong";
       play(correct ? "sfx_correct.mp3" : "sfx_wrong.mp3");  // 先播反馈，再切题
+
+      if (!correct) {
+        // 答错：先让孩子看到正确答案，再把正确选项念一遍
+        var arr = result.correctIndices || [];
+        var answerIndex = arr.length ? Number(arr[0]) : -1;
+        if (answerIndex >= 0 && cards[answerIndex]) {
+          setTimeout(function () {
+            cards[answerIndex].className += " correct";
+            play(audioName(round.question, answerIndex));
+          }, 1500);
+        }
+      }
       setTimeout(function () {
         if (result.next && result.next.question) render(result.next);
         else nextRound();
-      }, correct ? 1400 : 1700);
+      }, correct ? 1500 : 3600);
     }, function () {
       locked = false;
       toast("网络异常");
@@ -276,14 +288,22 @@
       else if (dir === "right") moveFocus(1);
     },
     select: function () { choose(focus); },
+    replay: function () { replay(); },
     back: function () { nativeCall("exitToLauncher"); }
   };
+
+  // 再听一遍：重播当前题干（遥控器 MENU 键）
+  function replay() {
+    if (locked || !round || !round.question) return;
+    play(audioName(round.question, -1));
+  }
 
   document.addEventListener("keydown", function (e) {
     var k = e.key;
     if (k === "ArrowLeft") { e.preventDefault(); moveFocus(-1); }
     else if (k === "ArrowRight") { e.preventDefault(); moveFocus(1); }
     else if (k === "Enter" || k === " ") { e.preventDefault(); choose(focus); }
+    else if (k === "m" || k === "M") { e.preventDefault(); replay(); }
   });
 
   window.SOTV_RESUME = function () { if (!round) nextRound(); };

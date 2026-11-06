@@ -18,15 +18,20 @@
 | 遥控器交互 | `←` `→` 切焦点，`OK/Enter` 确认；兼容 `KEYCODE_DPAD_CENTER` 与 `KEYCODE_ENTER` |
 | 老电视兼容 | `minSdk 21`（Android 5.0），实测目标 Android 7.0 / VIDAA；前端已规避 `flex gap`、`fetch` 等新特性 |
 | 题库 | 275 题：识字 100、英语 96、数学 79；固定 ID 与音频一一对应 |
+| 出题去重 | 最近 **30 题不重复**（`recent_qids`），小题库自动重置队列 |
+| 错题重现 | 答错后**隔 5 题**再出（`retry_qids`），间隔复习（`spacedRepetitionEnabled`）默认开启 |
+| 复听 / 纠错 | 遥控器 `MENU`（或 `PLAY/PAUSE`）重播题干；答错后高亮并**朗读正确选项** |
+| 家长面板 | 电视上直接显示 `http://<电视IP>:8099/admin`，手机/电脑浏览器**免扫码**打开 |
 
 ### 关键参数
 
 | 项 | 值 |
 | :-- | :-- |
-| versionName / versionCode | `1.0.0` / `5` |
-| applicationId | `com.studyontv.tv`（debug 构建带 `.debug` 后缀） |
+| versionName / versionCode | CI：`1.1.<run>` / `10000 + run`；本地：`1.1.0` / `10000`（自动，无需手改） |
+| applicationId | `com.babytv.tv`（debug 构建带 `.debug` 后缀） |
+| 签名 | release 包使用自有 keystore（PKCS12），CI 从 GitHub Secrets 注入 |
 | minSdk / targetSdk / compileSdk | `21` / `34` / `36` |
-| APK 体积 | 约 11 MB（debug） |
+| APK 体积 | 约 12 MB（release，含 1102 个离线音频） |
 | 题库文件 | `data/seed.json` |
 | 音频目录 | `data/audio/`（构建时同步进 `assets/audio/`） |
 
@@ -56,7 +61,7 @@ BabyTV/
 │  ├─ web/index.html                 ← 【孩子端唯一界面】大字卡片 + 遥控器交互（改 UI 改这里）
 │  └─ native/                        ← Android 工程（gradle 根，无 wrapper，CI 用 gradle 命令构建）
 │     └─ app/src/main/
-│        ├─ java/com/studyontv/tv/   ← Kotlin 源码（见下表）
+│        ├─ java/com/babytv/tv/     ← Kotlin 源码（见下表）
 │        ├─ res/values/strings.xml   ← 应用名 BabyTV / 无障碍文案
 │        └─ assets/                  ← 构建时自动生成：web/ admin/ audio/ questions.json
 ├─ data/
@@ -69,9 +74,12 @@ BabyTV/
 │  ├─ generate_audio.py              ← edge-tts 批量合成语音
 │  ├─ gen-how-it-works.mjs           ← 上游：生成流程图
 │  └─ make-shots.mjs                 ← 上游：生成截图
-├─ tools/preview.py                  ← 电脑端预览服务器（本地模拟设备 API）
+├─ tools/
+│  ├─ preview.py                     ← 电脑端预览服务器（本地模拟设备 API）
+│  └─ make_brand_assets.py           ← 生成应用图标（小熊）+ 电视横幅
+├─ keystore/                         ← 【本地私有，不入库】release 签名钥匙，务必备份
 ├─ docs/                             ← 上游文档存档 + 截图
-└─ .github/workflows/build.yml       ← CI：校验音频 → 构建 → 发布 Release
+└─ .github/workflows/build.yml       ← CI：校验音频 → release 签名构建 → 发布 Release
 ```
 
 ### 核心 Kotlin 文件
@@ -210,14 +218,16 @@ python scripts/generate_audio.py
 
 ### 2.5 构建 APK
 
-**方式 A：本地（装了 Android SDK）**
+**方式 A：本地（装了 Android SDK + JDK17）**
 
 ```powershell
 cd app/native
-gradle assembleTvDebug        # 产物 app/build/outputs/apk/tv/debug/app-tv-debug.apk
+gradle assembleTvDebug       # debug：app/build/outputs/apk/tv/debug/app-tv-debug.apk
+gradle assembleTvRelease     # release：需先配置 keystore（见 2.8）
 ```
 
 > 仓库**不含 gradle wrapper**（`gradlew`），请用系统 `gradle` 或 `gradle wrapper` 自行生成；CI 用 `gradle/actions/setup-gradle` 提供 Gradle 8.14.3。
+> 本机若没有 Java / Android SDK，直接走方式 B 即可（本仓库就是纯云端构建）。
 
 **方式 B：GitHub Actions（推荐，零本地环境）**
 
@@ -225,7 +235,7 @@ gradle assembleTvDebug        # 产物 app/build/outputs/apk/tv/debug/app-tv-deb
 git push   # 触发 .github/workflows/build.yml
 ```
 
-流水线步骤：装 JDK17/SDK → 校验音频完整性（缺文件直接失败）→ `assembleTvDebug` → 重命名 + SHA256 → 上传 Artifact → **发布 GitHub Release（标签 `v<versionName>`）**。
+流水线步骤：装 JDK17/SDK → 校验音频完整性（缺文件直接失败）→ 有 `KEYSTORE_BASE64` 时 `assembleTvRelease`（release 签名，否则自动回退 debug）→ 重命名 + SHA256 → 上传 Artifact → **发布 GitHub Release（标签 `v1.1.<run>`）**。
 
 构建前 `Sync` 任务会把 `app/web`、`admin`、`data/seed.json`、`data/audio` 同步进 `assets/`（这些生成物已 gitignore）。
 
@@ -241,17 +251,29 @@ scope: web | native | seed | audio | ci | docs
 ```
 
 - 一次提交只做一件事；题库与音频**放同一次提交**，避免"声音对不上题"。
-- 不要提交 `app/native/app/src/main/assets/` 下的生成物、`dist/`、`build/`、`*.jks`。
+- 不要提交 `app/native/app/src/main/assets/` 下的生成物、`dist/`、`build/`、`keystore/`、`*.jks`、`*.p12`。
 
-### 2.7 版本与发布
+### 2.7 版本与发布（已自动化）
 
-1. 改 `app/native/app/build.gradle.kts`：
-   ```kotlin
-   versionCode = 5        // 每次发布 +1（整数，只能增）
-   versionName = "1.0.0"  // 展示用，Release 标签取这个值
-   ```
-2. `git push` 后 CI 自动建 Release `v1.0.0`，附件为 `BabyTV-v1.0.0-tv-debug.apk` 与 `SHA256SUMS.txt`。
-3. 下载页：`https://github.com/RonL89/BabyTV/releases`
+| 项 | 规则 |
+| :-- | :-- |
+| `versionCode` | `10000 + GITHUB_RUN_NUMBER`，只增不减，覆盖安装不会冲突 |
+| `versionName` | `1.1.<GITHUB_RUN_NUMBER>`；若本次是 tag 触发则用 tag 名 |
+| Release 标签 | `v<versionName>`，每次 push `main` 自动创建/更新 |
+| 附件 | `BabyTV-v<version>-tv-release.apk` + `SHA256SUMS.txt`（无密钥时是 `-tv-debug.apk`） |
+
+本地构建不设环境变量时：`versionCode=10000`、`versionName=1.1.0`。想固定语义版本，打 tag 即可（如 `git tag v1.2.0 && git push --tags`）。
+
+### 2.8 签名密钥（release，务必阅读）
+
+- 本地密钥：`keystore/release.p12`（PKCS12）+ `keystore/keystore.properties`（密码/别名），**两者都不入库**（`.gitignore` 已忽略整个 `keystore/`）。
+- **必须备份**：把整个 `keystore/` 目录复制到网盘 / U 盘 / 密码管理器。丢失后无法再发布"可覆盖安装"的更新，只能让用户卸载重装（学习进度会丢）。
+- CI 使用 4 个 GitHub Secrets：`KEYSTORE_BASE64`（p12 的 base64）、`KEYSTORE_PASS`、`KEY_ALIAS`（`babytv`）、`KEY_PASS`。当前仓库已配置。
+- 备份 base64（用于重建 Secret）：
+  ```powershell
+  [Convert]::ToBase64String([IO.File]::ReadAllBytes("keystore/release.p12")) | Set-Content keystore.b64
+  ```
+- 更换密钥会改变签名 → 老用户无法覆盖升级，非必要不要重新生成。
 
 ---
 
@@ -269,22 +291,23 @@ scope: web | native | seed | audio | ci | docs
 ```powershell
 adb connect 192.168.1.23:5555     # 无线调试（Android 7 无需配对码）
 adb devices                       # 看到 device 才算成功；offline 就 adb disconnect 再连
-adb install -r dist\BabyTV-v1.0.0-tv-debug.apk
+adb install -r dist\BabyTV-v1.1.0-tv-release.apk
 ```
 
-> debug 包的包名带后缀：**`com.studyontv.tv.debug`**（未加后缀的 `com.studyontv.tv` 是 release 包名）。
+> debug 包的包名带后缀：**`com.babytv.tv.debug`**（未加后缀的 `com.babytv.tv` 是 release 包名）。
+> ⚠️ 从旧版迁移：旧包 `com.studyontv.tv` 与新包互不兼容，先 `adb uninstall com.studyontv.tv`（或电视上卸载）再装新版；卸载会清空旧进度（本项目改名时本来也是 0 进度）。
 
 ### 3.3 常用命令速查
 
 | 目的 | 命令 |
 | :-- | :-- |
-| 启动应用 | `adb shell am start -n com.studyontv.tv.debug/com.studyontv.tv.MainActivity` |
-| 或（等价） | `adb shell monkey -p com.studyontv.tv.debug -c android.intent.category.LAUNCHER 1` |
-| 强制停止 | `adb shell am force-stop com.studyontv.tv.debug` |
-| 卸载 | `adb uninstall com.studyontv.tv.debug` |
-| 清空学习数据（保留下载包） | `adb shell pm clear com.studyontv.tv.debug` |
-| 查看版本 | `adb shell dumpsys package com.studyontv.tv.debug \| Select-String versionName` |
-| 已装包名 | `adb shell pm list packages \| Select-String studyontv` |
+| 启动应用 | `adb shell am start -n com.babytv.tv.debug/com.babytv.tv.MainActivity` |
+| 或（等价） | `adb shell monkey -p com.babytv.tv.debug -c android.intent.category.LAUNCHER 1` |
+| 强制停止 | `adb shell am force-stop com.babytv.tv.debug` |
+| 卸载 | `adb uninstall com.babytv.tv.debug` |
+| 清空学习数据（保留下载包） | `adb shell pm clear com.babytv.tv.debug` |
+| 查看版本 | `adb shell dumpsys package com.babytv.tv.debug \| Select-String versionName` |
+| 已装包名 | `adb shell pm list packages \| Select-String babytv` |
 | 本机 HTTP 服务端口 | `adb shell "curl -s 127.0.0.1:8099/api/hello"`（电视无 curl 时跳过） |
 | 关闭安装校验（装不上时） | `adb shell settings put global verifier_verify_adb_installs 0` |
 
@@ -292,11 +315,11 @@ adb install -r dist\BabyTV-v1.0.0-tv-debug.apk
 
 ```powershell
 adb logcat -c                                        # 先清空
-adb logcat -v time | Select-String -Pattern "studyontv|AndroidRuntime|chromium|MediaPlayer"
+adb logcat -v time | Select-String -Pattern "babytv|AndroidRuntime|chromium|MediaPlayer"
 ```
 
 - 只看崩溃：`adb logcat -v time *:E`
-- 按进程过滤：`adb shell pidof com.studyontv.tv.debug` → `adb logcat --pid=<pid>`
+- 按进程过滤：`adb shell pidof com.babytv.tv.debug` → `adb logcat --pid=<pid>`
 - 前端报错（JS）：WebView 控制台会进 logcat，关键字 `chromium`；debug 包已开启 `setWebContentsDebuggingEnabled(true)`，可用电脑 Chrome 打开 `chrome://inspect` → `inspect` 远程调试页面。
 
 ### 3.5 截图 / 录屏（注意 PowerShell 会破坏二进制输出）
@@ -336,7 +359,7 @@ adb shell input keyevent 4    # BACK
 
 ### 4.1 首次安装（U 盘，最稳）
 
-1. 电脑下载 `BabyTV-v1.0.0-tv-debug.apk`（Releases 页）。
+1. 电脑下载 `BabyTV-v1.1.0-tv-release.apk`（Releases 页）。
 2. 拷到 U 盘根目录 → 插电视 → 打开电视「文件管理/U盘」→ 点击 APK。
 3. 弹出「禁止安装未知来源」→ 允许该文件管理器安装。
 4. 安装完成后在「我的应用」里找到 **BabyTV**。
@@ -345,9 +368,9 @@ adb shell input keyevent 4    # BACK
 
 ```powershell
 adb connect <电视IP>:5555
-adb install -r dist\BabyTV-v1.0.0-tv-debug.apk
-adb shell am start -n com.studyontv.tv.debug/com.studyontv.tv.MainActivity
-adb logcat -v time | Select-String -Pattern "studyontv|AndroidRuntime|chromium"
+adb install -r dist\BabyTV-v1.1.0-tv-release.apk
+adb shell am start -n com.babytv.tv.debug/com.babytv.tv.MainActivity
+adb logcat -v time | Select-String -Pattern "babytv|AndroidRuntime|chromium"
 ```
 
 若电视没有「网络调试」入口：先用 USB 线连电视与电脑，执行 `adb devices` 确认后 `adb tcpip 5555`，拔线后用 IP 连接。
@@ -363,13 +386,13 @@ adb logcat -v time | Select-String -Pattern "studyontv|AndroidRuntime|chromium"
 
 - 权限（悬浮窗/使用情况/无障碍/后台）**全部可选**，不授权也能正常答题。
 - 回家长页：答题界面**连按遥控器 `↑` 5 次**。
-- 家长密码遗忘：`adb shell pm clear com.studyontv.tv.debug` 重置（会清空进度）。
+- 家长密码遗忘：`adb shell pm clear com.babytv.tv.debug` 重置（会清空进度）。
 
 ### 4.4 装机常见失败
 
 | 现象 | 原因 / 处理 |
 | :-- | :-- |
-| `INSTALL_FAILED_UPDATE_INCOMPATIBLE` | 之前装过不同签名/包名的同名应用 → 先 `adb uninstall com.studyontv.tv.debug` |
+| `INSTALL_FAILED_UPDATE_INCOMPATIBLE` | 之前装过不同签名/包名的同名应用 → 先 `adb uninstall com.babytv.tv.debug` |
 | `INSTALL_FAILED_INSUFFICIENT_STORAGE` | 电视存储不足，清理缓存 |
 | 安装后打开黑屏 | WebView 未就绪或端口冲突；`adb logcat` 看 `LanServer` / `chromium`；确认 8099 未被占用 |
 | 有画面但没声音 | 检查 APK 是否来自 CI（会校验音频）；`adb logcat` 看 `MediaPlayer`；电视静音/音量 |
@@ -390,16 +413,19 @@ adb logcat -v time | Select-String -Pattern "studyontv|AndroidRuntime|chromium"
 | 题↔音对应 | ✅ 固定 ID `q_<序号>`，不再依赖随机顺序 |
 | assets 播放 | ✅ 已设置 `noCompress += "mp3"` + 缓存兜底 |
 | 老 WebView 兼容 | ✅ 已移除 `flex gap`、`fetch`/`Promise` 依赖（Android 7 自带 WebView 常见 Chrome 51~60） |
+| 出题去重 | ✅ 最近 30 题不重复；错题隔 5 题重现 |
+| 签名 | ✅ 自有 release keystore（PKCS12），CI 自动签名 |
+| 品牌 | ✅ 小熊图标 + 320×180 电视横幅，包名 `com.babytv.tv` |
 | 构建 | ✅ CI 空环境（无 wrapper）构建通过，产物已发布 Release |
 
 已知限制（需要的话可以继续改）：
 
-1. **debug 签名**：当前发布的是 debug 包，未来换 release 签名无法覆盖升级，建议尽早建自己的 keystore。
+1. **签名密钥只有一份**：丢失后无法再发布可覆盖安装的更新，务必备份 `keystore/`（见 2.8）。
 2. **音频来源**：云 TTS 输出，个人自用没问题，商用需替换（见 1.3）。
-3. **包名沿用上游** `com.studyontv.tv`：改包名会中断覆盖升级与家长数据继承，暂未改。
+3. **旧包名迁移**：从上游包 `com.studyontv.tv` 升级必须先卸载旧版（数据不继承）；新装包名 `com.babytv.tv`。
 4. **首次家长密码**：必须在电视上用遥控器/键盘输入，属于一次性成本。
 5. **屏幕时间管控（GateService/无障碍）** 在 VIDAA 上可能受限；不影响答题主流程。
-6. **出题不会真正"不重复"**：每轮从全库随机抽取，275 题够用，但长期看会重复。
+6. **去重窗口是 30 题**：玩超过 30 题后旧题会再次出现（符合幼儿复习预期，不是无限不重复）。
 7. **未适配超低端 720p**：字号用 `vh/vw`，极端分辨率下需微调。
 
 ---
@@ -416,7 +442,14 @@ adb logcat -v time | Select-String -Pattern "studyontv|AndroidRuntime|chromium"
 控制台是 GBK。文件本身是 UTF-8，不影响结果；想看正常输出可 `chcp 65001`。
 
 **Q4：能不能不用 CI，本地出 release 包？**
-可以：配 `app/native/local.properties`（`KEYSTORE_PATH/KEYSTORE_PASS/KEY_ALIAS/KEY_PASS`）后执行 `gradle assembleTvRelease`。
+可以，有两种方式（任选其一）：
+- 把 `KEYSTORE_PATH` / `KEYSTORE_PASS` / `KEY_ALIAS` / `KEY_PASS` 写进 `app/native/local.properties`；
+- 或直接用仓库根目录的 `keystore/keystore.properties`（Gradle 自动读取）。
+
+然后 `cd app/native && gradle assembleTvRelease`。
+
+**Q6：为什么 Release 版本号是 `1.1.6` 这种？**
+`versionName = 1.1.<CI run number>`、`versionCode = 10000 + run`，全自动、只增不减。打 tag（`git push --tags`）时改用 tag 名。
 
 **Q5：电视很卡/字很小？**
 改 `app/web/index.html` 里的 `#stem` `font-size` 与 `.card` `width/height/font-size`（都是 `vh/vw` 相对单位）。
@@ -425,10 +458,22 @@ adb logcat -v time | Select-String -Pattern "studyontv|AndroidRuntime|chromium"
 
 ## 七、后续可做的事（建议顺序）
 
-1. **建 release 签名**（一次性，越早越好）→ 后续可持续覆盖升级。
-2. **答题读音重复**：加一个"再听一遍"按键（如 `KEYCODE_MENU`）。
-3. **答错时念正确答案**（可复用 `q_N_opt_k.mp3`，改 3 行 JS）。
-4. **题型扩展**：看图选字、听音选图（需加图片资源与打包流程）。
-5. **学习报告**：用现有 `events` 表 + 家长面板 `/api/history` 出周报。
-6. **CI 自动化发版**：`versionCode` 用 run number，`versionName` 用 tag，避免手改。
-7. **多语言/多套题库**：按 `subject` 分组出「专项模式」，前台用遥控器长按切换。
+本轮已完成（2026-11）：
+
+- ✅ 自有 release 签名（PKCS12）+ CI Secrets 自动签名
+- ✅ 包名 `com.babytv.tv`（彻底去掉上游旧名）
+- ✅ 最近 30 题不重复 + 错题隔 5 题再现 + 间隔复习默认开启
+- ✅ 小熊图标 / 电视横幅
+- ✅ `MENU` 再听一遍 + 答错念正确答案
+- ✅ `versionCode` 取 CI run number，`versionName` 自动递增
+- ✅ 家长面板电视端直显 `http://IP:8099/admin`（免扫码）
+
+可以继续做：
+
+1. **看图选字**：选项换成图片（需加图片资源 + 打包流程 + 音频配套）。
+2. **学习周报**：用现有 `events` 表 + `/api/history` 生成家长可见的图表。
+3. **语音调速/重读最后一句**：低龄孩子常需要更慢的语速。
+4. **专项模式**：按 `subject` 只练识字/英语/数学，遥控器长按切换。
+5. **家长面板二维码回退**：已有直显网址，若想扫码可再补一个本地生成的二维码（不依赖外网）。
+6. **屏幕时间管控适配 VIDAA**：确认无障碍/悬浮窗在海信上的实际可用性。
+7. **多设备同步**：把学习进度导出/导入（U 盘 JSON），换电视不丢进度。

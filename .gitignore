@@ -31,7 +31,10 @@ StudyOnTV-*.apk
 *.idsig
 *.jks
 *.keystore
+*.p12
 babytv-release.jks
+# release 签名密钥与密码：绝不入库，务必备份到网盘/U 盘
+/keystore/
 
 /app/server/
 /parent-ui/

@@ -6,4 +6,4 @@
     android:canRetrieveWindowContent="false"
     android:description="@string/accessibility_desc"
     android:notificationTimeout="100"
-    android:settingsActivity="com.studyontv.tv.OnboardingActivity" />
+    android:settingsActivity="com.babytv.tv.OnboardingActivity" />

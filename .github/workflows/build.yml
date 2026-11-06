@@ -10,6 +10,10 @@ on:
 permissions:
   contents: write
 
+concurrency:
+  group: babytv-build-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   build:
     name: Assemble BabyTV TV APK
@@ -62,28 +66,70 @@ jobs:
               sys.exit(1)
           PY
 
-      - name: Read version
+      # 版本自动化：versionName=1.1.<run>，versionCode 在 build.gradle.kts 里取 run number
+      - name: Compute version
         id: ver
         run: |
-          VERSION=$(grep -oP 'versionName\s*=\s*"\K[^"]+' app/native/app/build.gradle.kts | head -1)
+          if [ "${GITHUB_REF_TYPE}" = "tag" ]; then
+            VERSION="${GITHUB_REF_NAME#v}"
+          else
+            VERSION="1.1.${GITHUB_RUN_NUMBER}"
+          fi
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
-          echo "APP_VERSION=$VERSION"
+          echo "BABYTV_VERSION=$VERSION" >> "$GITHUB_ENV"
 
-      - name: Assemble
+      # 有 keystore secret 才出 release 签名包，否则回退 debug，保证流水线永不中断
+      - name: Prepare signing key
+        id: keystore
+        env:
+          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+        run: |
+          if [ -z "$KEYSTORE_BASE64" ]; then
+            echo "signed=false" >> "$GITHUB_OUTPUT"
+            echo "::warning::未配置 KEYSTORE_BASE64，本次构建 debug 包"
+          else
+            mkdir -p "$GITHUB_WORKSPACE/keystore"
+            printf '%s' "$KEYSTORE_BASE64" | base64 -d > "$GITHUB_WORKSPACE/keystore/release.p12"
+            test -s "$GITHUB_WORKSPACE/keystore/release.p12"
+            echo "signed=true" >> "$GITHUB_OUTPUT"
+            echo "已载入 release 签名密钥"
+          fi
+
+      - name: Assemble release (signed)
+        if: steps.keystore.outputs.signed == 'true'
+        working-directory: app/native
+        env:
+          KEYSTORE_PATH: ${{ github.workspace }}/keystore/release.p12
+          KEYSTORE_PASS: ${{ secrets.KEYSTORE_PASS }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASS: ${{ secrets.KEY_PASS }}
+          KEYSTORE_TYPE: PKCS12
+        run: gradle assembleTvRelease --no-daemon --stacktrace
+
+      - name: Assemble debug (fallback)
+        if: steps.keystore.outputs.signed != 'true'
         working-directory: app/native
         run: gradle assembleTvDebug --no-daemon --stacktrace
 
       - name: Rename APK
+        env:
+          VERSION: ${{ steps.ver.outputs.version }}
         run: |
           mkdir -p dist
-          cp app/native/app/build/outputs/apk/tv/debug/app-tv-debug.apk \
-             "dist/BabyTV-v${{ steps.ver.outputs.version }}-tv-debug.apk"
+          if [ "${{ steps.keystore.outputs.signed }}" = "true" ]; then
+            SRC=app/native/app/build/outputs/apk/tv/release/app-tv-release.apk
+            SUFFIX=release
+          else
+            SRC=app/native/app/build/outputs/apk/tv/debug/app-tv-debug.apk
+            SUFFIX=debug
+          fi
+          cp "$SRC" "dist/BabyTV-v${VERSION}-tv-${SUFFIX}.apk"
           cd dist && sha256sum *.apk > SHA256SUMS.txt && cat SHA256SUMS.txt
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
-          name: BabyTV-tv-debug
+          name: BabyTV-tv-apk
           path: dist/*
           if-no-files-found: error
           retention-days: 90
@@ -100,10 +146,12 @@ jobs:
 
             - 题库：识字 100 + 英语 96 + 数学 79，共 275 题
             - 语音：全量离线音频，无需联网、不依赖系统 TTS
-            - 交互：遥控器 ←/→ 选择，OK 确认，切换选项自动朗读
+            - 交互：遥控器 ←/→ 选择，OK 确认，MENU 再听一遍
+            - 出题：最近 30 题不重复，错题隔 5 题再现
             - 适配：minSdk 21，Android 7.0（海信 VIDAA 等老电视）
+            - 包名：`com.babytv.tv`；签名：${{ steps.keystore.outputs.signed == 'true' && 'release keystore' || 'debug（未配置密钥）' }}
 
-            下载 `BabyTV-v${{ steps.ver.outputs.version }}-tv-debug.apk`，
+            下载 `BabyTV-v${{ steps.ver.outputs.version }}-tv-${{ steps.keystore.outputs.signed == 'true' && 'release' || 'debug' }}.apk`，
             SHA256 见 `SHA256SUMS.txt`。
           files: dist/*
           fail_on_unmatched_files: true

@@ -11,6 +11,7 @@ import json
 import os
 import random
 import uuid
+from collections import deque
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -20,7 +21,9 @@ PAGE = os.path.join(ROOT, "app", "web", "index.html")
 PORT = int(os.environ.get("PREVIEW_PORT", "8123"))
 
 DATA = json.load(open(SEED, encoding="utf-8"))
-STATE = {"round": None, "last": -1, "stats": {"total": 0, "right": 0}}
+STATE = {"round": None, "stats": {"total": 0, "right": 0}}
+RECENT = deque(maxlen=30)   # 最近 30 题不重复（与 App 内 LearningEngine 一致）
+RETRY = []                  # 错题队列：[题目 id, 还要隔几题]
 
 SHIM = """
 <script>
@@ -49,11 +52,7 @@ SHIM = """
 """
 
 
-def pick_question():
-    idx = random.randrange(len(DATA))
-    while len(DATA) > 1 and idx == STATE["last"]:
-        idx = random.randrange(len(DATA))
-    STATE["last"] = idx
+def make_question(idx):
     q = DATA[idx]
     return {
         "id": "q_%d" % idx,
@@ -64,6 +63,24 @@ def pick_question():
         "tip": q.get("tip", ""),
         "type": "single",
     }
+
+
+def pick_question():
+    # 错题隔 5 题重现：每出一题，队列里的等待数减 1
+    for item in RETRY:
+        item[1] -= 1
+    due = next((item for item in RETRY if item[1] <= 0), None)
+    if due:
+        RETRY.remove(due)
+        return make_question(int(due[0][2:]))
+
+    candidates = [i for i in range(len(DATA)) if "q_%d" % i not in RECENT]
+    if not candidates:
+        RECENT.clear()
+        candidates = list(range(len(DATA)))
+    idx = random.choice(candidates)
+    RECENT.append("q_%d" % idx)
+    return make_question(idx)
 
 
 def new_round():
@@ -134,6 +151,8 @@ class Handler(BaseHTTPRequestHandler):
             correct = idx == answer
             STATE["stats"]["total"] += 1
             STATE["stats"]["right"] += 1 if correct else 0
+            if not correct and not any(item[0] == q["id"] for item in RETRY):
+                RETRY.append([q["id"], 5])   # 隔 5 题再出现
             nxt = new_round()
             return self._json({
                 "correct": correct,
