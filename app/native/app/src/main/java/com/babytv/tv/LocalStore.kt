@@ -100,11 +100,11 @@ class LocalStore(context: Context) : SQLiteOpenHelper(context, "babytv.db", null
     }
 
     fun config(): JSONObject {
-        // 幼儿启蒙默认：随时可练（practice 模式不受时段/额度拦截）、全天可用
+        // 幼儿启蒙默认：答题解锁观看（严格模式）；家长可切回 practice 自由练习
         val defaults = JSONObject().put("dailyMinutes", 40).put("sessionMinutes", 10)
-            .put("questionsPerRound", 5).put("roundsPerDay", 3).put("passRatio", 0.6)
+            .put("questionsPerRound", 5).put("roundsPerDay", 3).put("passRatio", 1.0)
             .put("windowStart", "18:30").put("windowEnd", "20:00").put("allDay", true).put("spacedRepetitionEnabled", true)
-            .put("playMode", "practice").put("extraEnabled", true)
+            .put("playMode", "round").put("extraEnabled", true)
             .put("wrongThreshold", 3).put("extraQuestions", 2)
             .put("difficultyRewardEnabled", false)
             .put("difficultyRewards", JSONObject().put("1", 1).put("2", 2).put("3", 3).put("4", 4).put("5", 5))

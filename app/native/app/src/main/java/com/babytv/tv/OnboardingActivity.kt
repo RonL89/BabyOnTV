@@ -82,17 +82,16 @@ class OnboardingActivity : Activity() {
         content.addView(mode, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(18); bottomMargin = dp(16) })
 
         val cards = mutableListOf<View>()
-        if (tv) {
-            cards.add(permission("悬浮窗", "到时间后显示学习页", android.R.drawable.ic_menu_view, { GateOverlay.canDraw(this) }) {
-                openSettings(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, true)
-            })
-            cards.add(permission("使用情况访问", "更准确地计算应用使用时间", android.R.drawable.ic_menu_recent_history, { Foreground.hasUsageAccess(this) }) {
-                openSettings(Settings.ACTION_USAGE_ACCESS_SETTINGS)
-            })
-            cards.add(permission("无障碍服务", "帮助及时识别应用切换", android.R.drawable.ic_menu_manage, { WatchAccessibilityService.connected }) {
-                openSettings(Settings.ACTION_ACCESSIBILITY_SETTINGS)
-            })
-        }
+        // 电视和手机/平板都需要：否则离开 App 后学习页盖不住（严格模式失效）
+        cards.add(permission("悬浮窗", "到时间后显示学习页", android.R.drawable.ic_menu_view, { GateOverlay.canDraw(this) }) {
+            openSettings(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, true)
+        })
+        cards.add(permission("使用情况访问", "更准确地计算应用使用时间", android.R.drawable.ic_menu_recent_history, { Foreground.hasUsageAccess(this) }) {
+            openSettings(Settings.ACTION_USAGE_ACCESS_SETTINGS)
+        })
+        cards.add(permission("无障碍服务", "帮助及时识别应用切换", android.R.drawable.ic_menu_manage, { WatchAccessibilityService.connected }) {
+            openSettings(Settings.ACTION_ACCESSIBILITY_SETTINGS)
+        })
         cards.add(permission("后台运行", if (tv) "减少系统清理，适合电视常驻" else "允许后台播放与更新，避免被系统清理", android.R.drawable.ic_lock_idle_alarm, null) {
             openSettings(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, true)
         })

@@ -26,6 +26,17 @@ object DeviceRuntime {
             override fun onActivityDestroyed(activity: android.app.Activity) = Unit
         })
         store = LocalStore(app)
+        // 一次性迁移：v1.1.16 起默认恢复「答题解锁观看」（严格模式），答对 5 题才解锁
+        if (store.get("strict_migrated") != "1.1.16") {
+            try {
+                val next = org.json.JSONObject(store.get("config", "{}"))
+                next.put("playMode", "round")
+                next.put("passRatio", 1.0)
+                store.saveConfig(next)
+            } catch (e: Exception) {
+            }
+            store.set("strict_migrated", "1.1.16")
+        }
         SeedAssets.ensureQuestions(app, store)
         learning = LearningEngine(store)
         server = LanServer(app, store, app.assets).also {

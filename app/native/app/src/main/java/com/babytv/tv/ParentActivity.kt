@@ -133,12 +133,42 @@ class ParentActivity : Activity() {
         }
         pauseInfo = tv
         content.addView(tv)
+
+        // 严格 / 宽松：严格 = 答对 5 题解锁 10 分钟，其余时间离开 App 会被学习页盖住
+        val strictBtn = Button(this).apply {
+            text = strictLabel()
+            learningStyle()
+            setOnClickListener {
+                setStrict(!isStrict())
+                text = strictLabel()
+            }
+        }
+        content.addView(strictBtn, LinearLayout.LayoutParams(-1, -2))
         content.addView(Button(this).apply {
             text = "退出应用（回电视桌面）"
             learningStyle()
             setOnClickListener { quitApp() }
         }, LinearLayout.LayoutParams(-1, -2))
         setContentView(ScrollView(this).apply { isFillViewport = true; addView(content) })
+    }
+
+    private fun isStrict(): Boolean =
+        DeviceRuntime.store.config().optString("playMode", "round") != "practice"
+
+    private fun strictLabel(): String = if (isStrict())
+        "答题锁屏：开（答对 5 题解锁 10 分钟）"
+    else
+        "答题锁屏：关（自由练习，不锁屏）"
+
+    private fun setStrict(on: Boolean) {
+        try {
+            val next = DeviceRuntime.store.config()
+            next.put("playMode", if (on) "round" else "practice")
+            if (on) next.put("passRatio", 1.0)
+            DeviceRuntime.store.saveConfig(next)
+            if (on) try { GateService.start(this) } catch (_: RuntimeException) { }
+        } catch (e: Exception) {
+        }
     }
 
     private fun pauseText(): String {
