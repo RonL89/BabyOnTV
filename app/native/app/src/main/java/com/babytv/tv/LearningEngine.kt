@@ -290,8 +290,12 @@ class LearningEngine(private val store: LocalStore) {
             val rules = round.getJSONObject("rules")
             val wasExtra = round.optBoolean("extra")
             val mode = round.getString("mode")
+            // 累计答对满一轮：practice，或「及格分=100%」的 round（当前严格模式默认）都按「答对题数」结束，
+            // 答错继续出题，不会因为错一题就整轮重来；家长把及格分调低则回到「每轮 5 题按比例判定」。
+            val required = ceil(round.getInt("target") * rules.getDouble("passRatio")).toInt()
+            val cumulative = mode == "practice" || (mode == "round" && required >= round.getInt("target"))
             if (!correct) queueRetry(question.getString("id"))
-            if (!correct && rules.optBoolean("extraEnabled")) {
+            if (!correct && !cumulative && rules.optBoolean("extraEnabled")) {
                 var wrong = number("wrong_progress") + 1
                 if (wrong >= rules.getInt("wrongThreshold")) {
                     val extra = rules.getLong("extraQuestions")
@@ -303,7 +307,7 @@ class LearningEngine(private val store: LocalStore) {
             }
             if (correct && wasExtra && number("extra_pool") > 0) put("extra_pool", number("extra_pool") - 1)
             if (mode == "streak" && !correct && !wasExtra) round.put("earnedMs", 0)
-            if (!wasExtra || mode == "practice") {
+            if (!wasExtra || cumulative) {
                 round.put("answered", round.getInt("answered") + 1)
                 if (correct) round.put("correct", round.getInt("correct") + 1)
                 round.put("streak", if (correct) round.getInt("streak") + 1 else 0)
@@ -317,10 +321,9 @@ class LearningEngine(private val store: LocalStore) {
                 .put("difficulty", question.optInt("difficulty", 2)).put("extra", wasExtra).put("mode", mode))
             val baseDone = if (mode == "streak") round.getInt("streak") >= round.getInt("target")
                 else round.getInt("answered") >= round.getInt("target")
-            // 练习模式：累计答对 5 题才算完成（答错不出完成页，继续出题）
-            val practiceDone = mode == "practice" && round.getInt("correct") >= round.getInt("target")
-            val passed = mode == "streak" || round.getInt("correct") >= ceil(round.getInt("target") * rules.getDouble("passRatio")).toInt()
-            val finished = if (mode == "practice") practiceDone
+            val correctDone = round.getInt("correct") >= round.getInt("target")
+            val passed = mode == "streak" || round.getInt("correct") >= required
+            val finished = if (cumulative) correctDone
                 else baseDone && (!passed || number("extra_pool") == 0L)
             val result = JSONObject().put("correct", correct).put("correctIndices", if (type == "text") JSONArray() else expected)
                 .put("answerText", if (type == "text") question.getJSONArray("answers").getString(0) else "")
