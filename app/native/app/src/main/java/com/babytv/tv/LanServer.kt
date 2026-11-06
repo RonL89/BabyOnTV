@@ -95,20 +95,19 @@ class LanServer(
 
                 val out = c.getOutputStream()
                 if (method == "OPTIONS") return reply(out, 204, null, null)
-                val local = c.inetAddress?.isLoopbackAddress ?: false
-                route(method, path, query, headers, body, out, local)
+                route(method, path, query, headers, body, out)
             } catch (e: Exception) {
                 
             }
         }
     }
 
-    private fun route(method: String, path: String, query: String, headers: Map<String, String>, body: String, out: OutputStream, local: Boolean) {
+    private fun route(method: String, path: String, query: String, headers: Map<String, String>, body: String, out: OutputStream) {
         val q = if (query.isEmpty()) emptyMap() else query.split("&").associate {
             val kv = it.split("=", limit = 2)
             kv[0] to java.net.URLDecoder.decode(kv.getOrElse(1) { "" }, "UTF-8")
         }
-        val deviceAccess = local && headers["x-device-token"] == AdminAuth.deviceToken
+        val deviceAccess = headers["x-device-token"] == AdminAuth.deviceToken
         val token = headers["authorization"]?.removePrefix("Bearer ") ?: headers["x-admin-token"]
         if (path == "/api/auth" && method == "POST") {
             val value = try { JSONObject(body).optString("passphrase") } catch (e: Exception) { "" }
@@ -226,8 +225,18 @@ class LanServer(
 
     
     private fun serveStatic(path: String, out: OutputStream) {
+        // 孩子端页面注入设备令牌：手机/平板用浏览器打开电视地址也能答题
+        if (path == "/" || path == "/index.html") {
+            try {
+                val raw = assets.open("web/index.html").use { it.readBytes().toString(Charsets.UTF_8) }
+                val html = raw.replace("<head>", "<head><script>window.__BTV_TOKEN='" + AdminAuth.deviceToken + "';</script>", ignoreCase = true)
+                return reply(out, 200, "text/html; charset=utf-8", html.toByteArray(Charsets.UTF_8))
+            } catch (e: Exception) {
+                return reply(out, 404, "text/plain; charset=utf-8", "404".toByteArray())
+            }
+        }
         val (assetPath, contentType) = when {
-            path == "/" || path == "/index.html" -> "web/index.html" to "text/html; charset=utf-8"
+            path.startsWith("/audio/") -> "audio/" + path.removePrefix("/audio/").substringAfterLast('/') to "audio/mpeg"
             path.startsWith("/admin/assets/") -> "admin" + path.removePrefix("/admin") to mime(path)
             path.startsWith("/admin") -> "admin/index.html" to "text/html; charset=utf-8"
             path.startsWith("/assets/") -> "web" + path to mime(path)

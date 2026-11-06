@@ -294,8 +294,8 @@ scope: web | native | seed | audio | ci | docs
 ```powershell
 adb connect 192.168.1.23:5555     # 无线调试（Android 7 无需配对码）
 adb devices                       # 看到 device 才算成功；offline 就 adb disconnect 再连
-adb install -r dist\BabyTV-v1.1.8-tv-release.apk      # 电视
-adb install -r dist\BabyTV-v1.1.8-mobile-release.apk  # 手机 / 平板
+adb install -r dist\BabyTV-v1.1.9-tv-release.apk      # 电视
+adb install -r dist\BabyTV-v1.1.9-mobile-release.apk  # 手机 / 平板
 ```
 
 > 电视包名：`com.babytv.tv`；手机/平板包名：`com.babytv.mobile`（debug 分别加 `.debug` 后缀）。两个包独立，可同时安装在一台设备上。
@@ -364,7 +364,7 @@ adb shell input keyevent 4    # BACK
 
 ### 4.1 首次安装（U 盘，最稳）
 
-1. Releases 页下载：电视用 `BabyTV-v1.1.8-tv-release.apk`；手机/平板用 `BabyTV-v1.1.8-mobile-release.apk`。
+1. Releases 页下载：电视用 `BabyTV-v1.1.9-tv-release.apk`；手机/平板用 `BabyTV-v1.1.9-mobile-release.apk`。
 2. 拷到 U 盘根目录 → 插设备 → 打开「文件管理/U盘」→ 点击 APK。
 3. 弹出「禁止安装未知来源」→ 允许该文件管理器安装。
 4. 安装完成后在电视「我的应用」/ 手机桌面找到 **BabyTV**。
@@ -372,6 +372,7 @@ adb shell input keyevent 4    # BACK
 ### 4.1.1 手机 / 平板使用说明
 
 - **作答**：直接点按巨大卡片；底部有「🔊 再听一遍」。
+- **不想装 App**：同一 Wi-Fi 下，手机/平板浏览器打开电视的 `http://<电视IP>:8099/` 也能答题（页面会自动带上设备令牌并走 `/audio/` 播放离线语音）；首次点一下屏幕后声音才会解锁。
 - **家长入口**：点右上角「家长」，或长按题干 1.5 秒；输入家长密码即可。
 - **屏幕**：竖屏、横屏都自适应；平板横屏最接近电视体验。
 - **管控**：手机/平板不启用系统级悬浮窗监控（避免影响正常使用），学习时段由 App 内部规则控制；返回键直接退到后台。
@@ -381,8 +382,8 @@ adb shell input keyevent 4    # BACK
 
 ```powershell
 adb connect <设备IP>:5555
-adb install -r dist\BabyTV-v1.1.8-tv-release.apk      # 电视
-adb install -r dist\BabyTV-v1.1.8-mobile-release.apk  # 手机 / 平板
+adb install -r dist\BabyTV-v1.1.9-tv-release.apk      # 电视
+adb install -r dist\BabyTV-v1.1.9-mobile-release.apk  # 手机 / 平板
 adb shell am start -n com.babytv.tv/com.babytv.tv.MainActivity
 adb shell am start -n com.babytv.mobile/com.babytv.tv.MainActivity
 adb logcat -v time | Select-String -Pattern "babytv|AndroidRuntime|chromium"

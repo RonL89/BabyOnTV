@@ -58,10 +58,12 @@
     font-weight: 900;
     line-height: 1;
     color: #FFFFFF;
+    cursor: pointer;
+    touch-action: manipulation;
+    -webkit-touch-callout: none;
     -webkit-transition: -webkit-transform .12s ease, border-color .12s ease;
     transition: transform .12s ease, border-color .12s ease, box-shadow .12s ease;
   }
-  .card + .card { margin-left: 4vw; }
   .card .label {
     display: block; width: 100%;
     text-align: center;
@@ -69,7 +71,9 @@
     white-space: normal;
     word-break: normal;
     overflow-wrap: normal; word-wrap: normal;
+    pointer-events: none;
   }
+  .card + .card { margin-left: 4vw; }
   .card.en { font-size: 7.2vw; }
   .card.focused {
     border-color: #35E0B0;
@@ -175,8 +179,24 @@
     } catch (e) { }
     return null;
   }
-  function play(file) { if (file) nativeCall("playAudio", [file]); }
-  function token() { return nativeCall("apiToken") || ""; }
+  var browserAudio = null;
+  function play(file) {
+    if (!file) return;
+    if (window.SOTVNative && typeof window.SOTVNative.playAudio === "function") {
+      nativeCall("playAudio", [file]);
+      return;
+    }
+    // 手机/平板用浏览器打开电视地址时，用 HTML5 Audio 播放
+    try {
+      if (!browserAudio) browserAudio = new Audio();
+      browserAudio.pause();
+      browserAudio.src = "/audio/" + encodeURIComponent(file);
+      browserAudio.currentTime = 0;
+      var p = browserAudio.play();
+      if (p && p.catch) p.catch(function () {});
+    } catch (e) { }
+  }
+  function token() { return nativeCall("apiToken") || window.__BTV_TOKEN || ""; }
 
   function toast(text) {
     toastBox.textContent = text || "";
@@ -201,11 +221,11 @@
           try { data = JSON.parse(xhr.responseText); } catch (e) { }
           if (data) finish(ok, data); else finish(fail);
         } else {
-          finish(fail);
+          finish(fail, xhr.status);
         }
       };
-      xhr.ontimeout = function () { finish(fail); };
-      xhr.onerror = function () { finish(fail); };
+      xhr.ontimeout = function () { finish(fail, 0); };
+      xhr.onerror = function () { finish(fail, 0); };
       xhr.send(JSON.stringify(body || {}));
     } catch (e) {
       finish(fail);
@@ -231,7 +251,10 @@
       label.textContent = list[i];
       el.appendChild(label);
       el.setAttribute("role", "option");
-      el.onclick = (function (index) { return function () { choose(index); }; })(i);
+      el.onclick = (function (index) { return function (e) { if (e && e.preventDefault) e.preventDefault(); choose(index); }; })(i);
+      el.addEventListener("touchend", (function (index) {
+        return function (e) { if (e && e.preventDefault) e.preventDefault(); choose(index); };
+      })(i), false);
       optionsBox.appendChild(el);
       cards.push(el);
     }
@@ -356,9 +379,9 @@
         if (result.next && result.next.question) render(result.next);
         else nextRound();
       }, correct ? 1500 : 3600);
-    }, function () {
+    }, function (status) {
       locked = false;
-      toast("网络异常");
+      toast(status === 403 ? "请用 BabyTV App 作答" : "网络异常（" + (status || "无响应") + "）");
     });
   }
 
@@ -417,6 +440,18 @@
     stem.addEventListener("mouseleave", holdEnd, false);
   }
   document.addEventListener("contextmenu", function (e) { e.preventDefault(); });
+
+  // 浏览器首次触摸后解锁音频（自动播放策略）；App 内使用原生播放器，不需要
+  if (!window.SOTVNative) {
+    var audioUnlocked = false;
+    var unlockAudio = function () {
+      if (audioUnlocked) return;
+      audioUnlocked = true;
+      if (round && round.question) play(audioName(round.question, -1));
+    };
+    document.addEventListener("touchstart", unlockAudio, true);
+    document.addEventListener("mousedown", unlockAudio, true);
+  }
 
   // 稍等 WebView 注入原生桥后再开始
   setTimeout(nextRound, 250);
