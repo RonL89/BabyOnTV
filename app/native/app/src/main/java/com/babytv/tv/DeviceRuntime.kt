@@ -1,6 +1,8 @@
 package com.babytv.tv
 
+import android.app.PendingIntent
 import android.content.Context
+import android.content.Intent
 
 object DeviceRuntime {
     private var server: LanServer? = null
@@ -44,6 +46,15 @@ object DeviceRuntime {
             Prefs.setLocalPort(app, it.boundPort)
         }
         WebShell.PrefsHolder.baseUrl = Prefs.localBase(app)
+        // 15 分钟看门狗：门禁服务被系统杀掉后尝试拉起（Android 12+ 可能被限制，失败只记日志）
+        try {
+            val am = app.getSystemService(Context.ALARM_SERVICE) as android.app.AlarmManager
+            val pi = PendingIntent.getBroadcast(app, 1002,
+                Intent(app, BootReceiver::class.java).setAction(BootReceiver.WATCHDOG),
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
+            am.setInexactRepeating(android.app.AlarmManager.ELAPSED_REALTIME, 15 * 60 * 1000L, 15 * 60 * 1000L, pi)
+        } catch (e: Exception) {
+        }
         if (GradingService.settings(store).optString("mode") == "ai") {
             val pending = store.reviews("pending")
             for (i in 0 until pending.length()) GradingService.enqueue(store, learning, pending.getJSONObject(i).getString("id"))

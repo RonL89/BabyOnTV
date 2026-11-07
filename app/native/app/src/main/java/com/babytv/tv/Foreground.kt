@@ -9,6 +9,8 @@ object Foreground {
     @Volatile var lastPackage: String? = null
         private set
     private var ownActivity: java.lang.ref.WeakReference<android.app.Activity>? = null
+    private var cachedPkg: String? = null
+    private var cachedAt = 0L
 
     fun resumeOwn(activity: android.app.Activity) {
         ownActivity = java.lang.ref.WeakReference(activity)
@@ -36,19 +38,23 @@ object Foreground {
         }
         if (WatchAccessibilityService.connected) lastPackage?.let { return it }
         if (!hasUsageAccess(context)) return null
+        val now = System.currentTimeMillis()
+        if (now - cachedAt < 2000) return cachedPkg
+        cachedAt = now
         return try {
             val manager = context.getSystemService(Context.USAGE_STATS_SERVICE) as UsageStatsManager
-            val now = System.currentTimeMillis()
-            val events = manager.queryEvents(now - 86400000, now)
+            // 只查最近 2 分钟并缓存 2 秒，避免每秒遍历 24 小时数万条事件
+            val events = manager.queryEvents(now - 120000, now)
             val event = UsageEvents.Event()
             var latest: String? = null
             while (events.hasNextEvent()) {
                 events.getNextEvent(event)
                 if (event.eventType == UsageEvents.Event.MOVE_TO_FOREGROUND) latest = event.packageName
             }
-            latest ?: manager.queryUsageStats(UsageStatsManager.INTERVAL_DAILY, now - 86400000, now)
+            cachedPkg = latest ?: manager.queryUsageStats(UsageStatsManager.INTERVAL_DAILY, now - 120000, now)
                 ?.filter { it.lastTimeUsed > 0 }?.maxByOrNull { it.lastTimeUsed }?.packageName
-        } catch (_: Exception) { null }
+            cachedPkg
+        } catch (_: Exception) { cachedPkg = null; null }
     }
 
     fun hasUsageAccess(context: Context): Boolean = try {

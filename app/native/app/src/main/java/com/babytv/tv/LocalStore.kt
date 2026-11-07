@@ -313,7 +313,12 @@ class LocalStore(context: Context) : SQLiteOpenHelper(context, "babytv.db", null
     }
 
     fun todayStats(): JSONObject = stats(startOfToday(), Long.MAX_VALUE)
-    fun roundsDoneToday(): Int = todayStats().optInt("rounds")
+
+    // 每秒被 status() 调用：直接用 SQL 计数，避免扫全表 + 反序列化 JSON（老电视上会卡）
+    fun roundsDoneToday(): Int = readableDatabase.rawQuery(
+        "SELECT COUNT(*) FROM events WHERE type='quiz_pass' AND ts>=?",
+        arrayOf(startOfToday().toString())
+    ).use { if (it.moveToFirst()) it.getInt(0) else 0 }
 
     fun historyDays(days: Int = 7): JSONArray {
         val out = JSONArray()

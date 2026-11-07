@@ -12,8 +12,8 @@ open class MainActivity : Activity() {
     protected lateinit var web: WebView
     private var webReleased = false
     private var page = "quiz"
-    private var upCount = 0
-    private var lastUp = 0L
+    private var okDownAt = 0L
+    private var okDown = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -74,19 +74,26 @@ open class MainActivity : Activity() {
         super.onResume()
         if (webReleased) createWeb()
         if (::web.isInitialized && !webReleased) web.evaluateJavascript("window.SOTV_RESUME&&SOTV_RESUME()", null)
+        // 门禁被系统杀掉后，回到 App 时自愈
+        if (!Prefs.serviceRunning(this)) try { GateService.start(this) } catch (_: RuntimeException) { }
     }
 
     override fun dispatchKeyEvent(event: KeyEvent): Boolean {
-        if (event.action == KeyEvent.ACTION_DOWN && event.repeatCount == 0) {
-            if (event.keyCode == KeyEvent.KEYCODE_DPAD_UP) {
-                val now = android.os.SystemClock.elapsedRealtime()
-                upCount = if (now - lastUp < 900) upCount + 1 else 1
-                lastUp = now
-                if (upCount >= 5) {
-                    upCount = 0
-                    startActivity(Intent(this, ParentActivity::class.java)); return true
-                }
-            } else upCount = 0
+        // 长按 OK 3 秒进家长页（避免与 ↑ 选中「家长」按钮冲突、也避免误触）
+        val isOk = event.keyCode == KeyEvent.KEYCODE_DPAD_CENTER ||
+            event.keyCode == KeyEvent.KEYCODE_ENTER || event.keyCode == KeyEvent.KEYCODE_NUMPAD_ENTER
+        if (isOk) {
+            if (event.action == KeyEvent.ACTION_DOWN) {
+                okDown = true; okDownAt = android.os.SystemClock.elapsedRealtime()
+            } else if (event.action == KeyEvent.ACTION_UP) {
+                okDown = false
+            }
+        }
+        if (okDown && isOk && event.action == KeyEvent.ACTION_DOWN && event.repeatCount > 0 &&
+            android.os.SystemClock.elapsedRealtime() - okDownAt >= 3000
+        ) {
+            okDown = false
+            startActivity(Intent(this, ParentActivity::class.java)); return true
         }
         if (!DeviceBridge.isTv(this) && event.keyCode == KeyEvent.KEYCODE_ENTER) return super.dispatchKeyEvent(event)
         val action = when (event.keyCode) {

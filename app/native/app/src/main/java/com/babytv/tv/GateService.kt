@@ -25,6 +25,8 @@ class GateService : Service() {
     private var lastTick = SystemClock.elapsedRealtime()
     private var wasUsing = false
     private var lastGate = 0L
+    private var lastState = ""
+    private var lastLogAt = 0L
     @Volatile private var settingsUntil = 0L
     private val systemSettingsPackage by lazy {
         packageManager.resolveActivity(Intent(android.provider.Settings.ACTION_SETTINGS), 0)?.activityInfo?.packageName
@@ -69,11 +71,23 @@ class GateService : Service() {
         val reason = DeviceRuntime.learning.status().getString("reason")
         val feedbackVisible = hasGate() && DeviceRuntime.store.get("review_feedback").isNotEmpty()
         wasUsing = active && reason.isEmpty() && !feedbackVisible
+
+        // 门禁日志：状态变化或每 30 秒写一行，供家长页排查「为什么没弹学习页」
+        val creditSec = (DeviceRuntime.store.get("credit_ms").toLongOrNull() ?: 0L) / 1000
+        val sig = listOf(awake, monitoring, canOverlay, WatchAccessibilityService.connected,
+            Foreground.hasUsageAccess(this), pkg ?: "null", active, reason, creditSec).joinToString("|")
+        if (sig != lastState || SystemClock.elapsedRealtime() - lastLogAt > 30000) {
+            lastState = sig; lastLogAt = SystemClock.elapsedRealtime()
+            Prefs.appendGateLog(this, sig)
+        }
+
         if (!awake || !monitoring || (reason.isEmpty() && !feedbackVisible) || (pkg != null && exempt(pkg, false))) hideAll()
         if (protecting && reason.isNotEmpty() && now - lastGate > 1800 && !hasGate()) {
-            lastGate = now
             val shown = WatchAccessibilityService.showGate(reason) || (canOverlay && overlay.show(reason))
-            if (!shown && Build.VERSION.SDK_INT < 29) {
+            lastGate = now
+            Prefs.setLastGate(this, System.currentTimeMillis())
+            Prefs.setLastGateResult(this, if (shown) "ok" else if (!canOverlay && !WatchAccessibilityService.connected) "no_permission" else "gate_activity_fallback")
+            if (!shown && Build.VERSION.SDK_INT < 29 && !GateActivity.isActive) {
                 try {
                     startActivity(Intent(this, GateActivity::class.java)
                         .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP).putExtra("reason", reason))
@@ -144,7 +158,19 @@ class GateService : Service() {
             val intent = Intent(context, GateService::class.java)
             if (Build.VERSION.SDK_INT >= 26) context.startForegroundService(intent) else context.startService(intent)
         }
-        fun hasGate(): Boolean = WatchAccessibilityService.hasGate() || instance?.overlay?.isShowing == true
+        fun hasGate(): Boolean = WatchAccessibilityService.hasGate() || instance?.overlay?.isShowing == true || GateActivity.isActive
+        fun testGate(context: Context) {
+            val s = instance ?: return
+            s.handler.post {
+                try {
+                    val ok = s.overlay.show("timeup")
+                    Prefs.setLastGateResult(context, if (ok) "ok" else "fail")
+                    if (ok) s.handler.postDelayed({ s.overlay.hide() }, 5000)
+                } catch (e: Exception) {
+                    Prefs.setLastGateResult(context, "err:" + e.message)
+                }
+            }
+        }
         fun hideGates() {
             Handler(Looper.getMainLooper()).post { instance?.overlay?.hide(); WatchAccessibilityService.hideGate() }
         }

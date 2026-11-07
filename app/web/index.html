@@ -262,15 +262,15 @@
   }
 
   // kind = "done"：答对 5 题（可以去看电视了）；"retry"：这一轮没达标；
-  //        "rest"：家长设置的休息时段内。孩子端没有退出按钮，退出只由「答对 5 题」或家长决定。
-  function showPanel(kind, minutesLeft) {
+  //        "rest"：家长设置的休息时段内；"watch"：还有剩余观看时长/额度用完的提示（会自动回桌面）。
+  function showPanel(kind, minutesLeft, title) {
     if (!doneBox) return;
     hideDone();
     // 收起选项，避免孩子隔着面板点到上一题的残留卡片
     optionsBox.innerHTML = "";
     cards = [];
     panelKind = kind;
-    var seconds = kind === "rest" ? 10 : (kind === "retry" ? 5 : 8);
+    var seconds = kind === "rest" ? 10 : (kind === "retry" ? 5 : (kind === "watch" ? 6 : 8));
     function paint() {
       if (kind === "rest") {
         doneTitle.textContent = "休息时间到啦";
@@ -278,6 +278,9 @@
       } else if (kind === "retry") {
         doneTitle.textContent = "还差一点点";
         doneText.textContent = "这一轮还没答对 5 题，马上再来一轮（" + seconds + " 秒后开始）";
+      } else if (kind === "watch") {
+        doneTitle.textContent = title || "可以去看动画啦";
+        doneText.textContent = (minutesLeft > 0 ? "还剩约 " + minutesLeft + " 分钟，去看动画吧" : "去看动画吧") + "（" + seconds + " 秒后回桌面）";
       } else {
         doneTitle.textContent = "太棒了！这一轮完成啦";
         doneText.textContent = "答对 5 题，休息一下眼睛吧（" + seconds + " 秒后去看电视）";
@@ -456,8 +459,16 @@
       if (data.question) { render(data); return; }
       if (data.next && data.next.question) { render(data.next); return; }
       if (data.pending) { toast("等待家长批改"); return; }
-      if (data.blocked) { showIdle("今天的学习时间结束啦"); return; }
-      if (data.watching) { showIdle("先看会儿动画吧"); return; }
+      if (data.blocked) {
+        var blockedText = { quota: "今天观看时长用完啦", rounds: "今天的轮次用完啦", schedule: "还没到开放时段" }[data.blocked] || "今天的学习时间结束啦";
+        showPanel("watch", 0, blockedText);
+        return;
+      }
+      if (data.watching) {
+        var leftMin = (data.status && data.status.remainingSeconds) ? Math.max(1, Math.round(data.status.remainingSeconds / 60)) : 0;
+        showPanel("watch", leftMin, "可以去看动画啦");
+        return;
+      }
       if (data.reviewed) { toast("已批改"); nextRound(); return; }
       retry();
     }, retry);

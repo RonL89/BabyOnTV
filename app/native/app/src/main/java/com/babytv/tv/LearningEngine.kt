@@ -59,7 +59,17 @@ class LearningEngine(private val store: LocalStore) {
     fun status(): JSONObject {
         day()
         val c = store.config()
-        val remaining = number("credit_ms")
+        var remaining = number("credit_ms")
+        // 墙钟安全网：严格模式下剩余观看时长最多存活「时长 + 2 分钟」，
+        // 到点强制归零，避免服务未运行时 credit 永远不扣、App 永远显示「先看动画吧」。
+        if (remaining > 0 && c.getString("playMode") != "practice") {
+            val started = store.get("unlock_started_at").toLongOrNull() ?: 0L
+            if (started > 0 && System.currentTimeMillis() - started > remaining + 120000) {
+                put("credit_ms", 0)
+                store.logEvent("credit_expired", JSONObject().put("ms", remaining))
+                remaining = 0
+            }
+        }
         val used = number("used_ms")
         val rounds = store.roundsDoneToday()
         val reason = when {
@@ -335,6 +345,9 @@ class LearningEngine(private val store: LocalStore) {
                     val budget = store.config().getLong("dailyMinutes") * 60000 - number("used_ms") - number("credit_ms")
                     grant = min(requested, budget.coerceAtLeast(0))
                     put("credit_ms", number("credit_ms") + grant)
+                    // 墙钟安全网：记录发放时刻，status() 里超时（时长+2分钟）强制归零，
+                    // 即使门禁服务被系统杀掉、时间没扣，也不会永远卡在 watching。
+                    store.set("unlock_started_at", System.currentTimeMillis().toString())
                     store.logEvent("quiz_pass", JSONObject().put("roundId", round.getString("id")).put("minutes", grant / 60000.0))
                 }
                 store.logEvent("quiz", JSONObject().put("native", true).put("total", round.getInt("answered"))

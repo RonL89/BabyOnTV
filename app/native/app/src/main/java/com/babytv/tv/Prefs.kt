@@ -39,4 +39,15 @@ object Prefs {
 
     fun serviceRunning(c: Context): Boolean = sp(c).getBoolean("service_running", false)
     fun setServiceRunning(c: Context, v: Boolean) = sp(c).edit().putBoolean("service_running", v).apply()
+
+    fun gateLog(c: Context): String = sp(c).getString("gate_log", "") ?: ""
+    fun appendGateLog(c: Context, line: String) {
+        val now = java.text.SimpleDateFormat("HH:mm:ss", java.util.Locale.US).format(java.util.Date())
+        val joined = (gateLog(c) + "\n" + now + " " + line).lines().takeLast(40).joinToString("\n")
+        sp(c).edit().putString("gate_log", joined).apply()
+    }
+    fun lastGateAt(c: Context): Long = sp(c).getLong("last_gate_at", 0L)
+    fun setLastGate(c: Context, at: Long) = sp(c).edit().putLong("last_gate_at", at).apply()
+    fun lastGateResult(c: Context): String = sp(c).getString("last_gate_result", "") ?: ""
+    fun setLastGateResult(c: Context, v: String) = sp(c).edit().putString("last_gate_result", v).apply()
 }

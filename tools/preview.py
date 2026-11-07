@@ -21,6 +21,8 @@ PAGE = os.path.join(ROOT, "app", "web", "index.html")
 PORT = int(os.environ.get("PREVIEW_PORT", "8123"))
 # 模拟家长设置的休息时段（分钟），用于验证「休息中」页面
 PAUSE_MINUTES = int(os.environ.get("PREVIEW_PAUSE_MINUTES", "0"))
+# 模拟还有剩余观看时长（分钟），用于验证「可以去看动画啦」页面
+WATCH_MINUTES = int(os.environ.get("PREVIEW_WATCH_MINUTES", "0"))
 TARGET_PER_ROUND = 5        # 与 App 的 questionsPerRound 默认值一致
 
 DATA = json.load(open(SEED, encoding="utf-8"))
@@ -143,6 +145,8 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/api/quiz/start":
             if PAUSE_MINUTES > 0:
                 return self._json({"paused": True, "minutesLeft": PAUSE_MINUTES})
+            if WATCH_MINUTES > 0:
+                return self._json({"watching": True, "status": {"remainingSeconds": WATCH_MINUTES * 60}})
             rnd = STATE.get("round") or new_round()
             return self._json(rnd)
 

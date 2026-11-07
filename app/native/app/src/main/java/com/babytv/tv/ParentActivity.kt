@@ -2,6 +2,7 @@ package com.babytv.tv
 
 import android.app.Activity
 import android.content.Intent
+import android.graphics.Typeface
 import android.os.Bundle
 import android.text.InputType
 import android.view.View
@@ -13,6 +14,7 @@ import android.widget.TextView
 
 class ParentActivity : Activity() {
     private var verified = false
+    private var keepVerified = false
     private var pauseInfo: TextView? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -105,7 +107,7 @@ class ParentActivity : Activity() {
         fun button(label: String, action: () -> Unit) {
             controls.addView(Button(this).apply { text = label; learningStyle(); setOnClickListener { action() } }, LinearLayout.LayoutParams(0, -2, 1f))
         }
-        button("权限设置") { startActivity(Intent(this, OnboardingActivity::class.java)) }
+        button("权限设置") { keepVerified = true; startActivity(Intent(this, OnboardingActivity::class.java)) }
         button("修改密码") { form(true, true) }
         button("返回答题") { startActivity(Intent(this, MainActivity::class.java)); finish() }
         content.addView(controls)
@@ -144,6 +146,36 @@ class ParentActivity : Activity() {
             }
         }
         content.addView(strictBtn, LinearLayout.LayoutParams(-1, -2))
+
+        // 门禁诊断：一眼看出「为什么没弹学习页」
+        content.addView(TextView(this).apply {
+            text = "门禁诊断"
+            textSize = 18f
+            typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
+            setTextColor(0xFF303B31.toInt())
+            setPadding(dp(24), dp(12), dp(24), dp(4))
+        })
+        val diag = TextView(this).apply {
+            text = diagText()
+            textSize = 13f
+            typeface = Typeface.MONOSPACE
+            setTextColor(0xFF303B31.toInt())
+            setPadding(dp(24), dp(4), dp(24), dp(8))
+        }
+        content.addView(diag)
+        val diagRow = LinearLayout(this)
+        fun diagButton(label: String, action: () -> Unit) {
+            diagRow.addView(Button(this).apply {
+                text = label
+                learningStyle()
+                setOnClickListener { action(); diag.text = diagText() }
+            }, LinearLayout.LayoutParams(0, -2, 1f))
+        }
+        diagButton("测试锁屏") { GateService.testGate(this) }
+        diagButton("重启门禁") { try { GateService.start(this) } catch (e: RuntimeException) { } }
+        diagButton("刷新") { }
+        content.addView(diagRow)
+
         content.addView(Button(this).apply {
             text = "退出应用（回电视桌面）"
             learningStyle()
@@ -159,6 +191,22 @@ class ParentActivity : Activity() {
         "答题锁屏：开（答对 5 题解锁 10 分钟）"
     else
         "答题锁屏：关（自由练习，不锁屏）"
+
+    private fun diagText(): String {
+        val st = DeviceRuntime.learning.status()
+        val sb = StringBuilder()
+        sb.append("服务: ").append(if (Prefs.serviceRunning(this)) "运行中" else "未运行").append('\n')
+        sb.append("悬浮窗: ").append(if (GateOverlay.canDraw(this)) "已授权" else "未授权")
+            .append("  使用情况: ").append(if (Foreground.hasUsageAccess(this)) "已授权" else "未授权").append('\n')
+        sb.append("无障碍: ").append(if (WatchAccessibilityService.connected) "已连接" else "未连接").append('\n')
+        sb.append("剩余: ").append(st.optLong("remainingSeconds") / 60).append(" 分")
+            .append("  今日: ").append(st.optDouble("usedMinutes").toInt()).append(" 分 / ")
+            .append(st.optInt("roundsDoneToday")).append(" 轮\n")
+        sb.append("状态: ").append(st.optString("reason").ifEmpty { "可观看" }).append('\n')
+        sb.append("最近弹窗: ").append(Prefs.lastGateResult(this).ifEmpty { "无" }).append('\n')
+        sb.append("日志:\n").append(Prefs.gateLog(this).takeLast(1200))
+        return sb.toString()
+    }
 
     private fun setStrict(on: Boolean) {
         try {
@@ -185,6 +233,10 @@ class ParentActivity : Activity() {
 
     private fun quitApp() {
         try {
+            stopService(Intent(this, GateService::class.java))
+        } catch (_: Exception) {
+        }
+        try {
             startActivity(Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_HOME)
                 .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
         } catch (_: Exception) {
@@ -192,9 +244,14 @@ class ParentActivity : Activity() {
         finishAffinity()
     }
 
+    override fun onResume() {
+        super.onResume()
+        keepVerified = false
+    }
+
     override fun onStop() {
         super.onStop()
-        if (verified) {
+        if (verified && !keepVerified) {
             verified = false
             form(false)
         }
