@@ -27,7 +27,7 @@
 | 退出限制 | 孩子端**没有退出按钮**，遥控器 `BACK` 也不放行（只提示「答对 5 题就可以去看电视啦」）；严格模式下未通过一轮时，切到别的应用或回桌面会被学习页盖住 |
 | 答题解锁 | 默认严格模式（`round`）：一轮 5 题、**累计答对 5 题**解锁 **10 分钟**；答错继续出题、不会整轮重来；每天上限 **40 分钟**、最多 **3 轮**；家长可随时在家长页切「答题锁屏 开/关」 |
 | 家长休息 | 家长页可设「休息 1 / 2 / 4 小时」：期间孩子端只显示休息页并自动退出，家长可随时取消 |
-| 家长入口 | 遥控器 `↑` 选中右上角「家长」按 `OK`（或快速连按 `↑` 5 次）；鼠标/触屏直接点；手机打开 `http://<电视IP>:8099/admin/` |
+| 家长入口 | 遥控器 `↑` 选中右上角「家长」按 `OK`，或**长按返回键 3 秒**；鼠标/触屏直接点；手机打开 `http://<电视IP>:8099/admin/` |
 
 ### 关键参数
 
@@ -300,8 +300,8 @@ scope: web | native | seed | audio | ci | docs
 ```powershell
 adb connect 192.168.1.23:5555     # 无线调试（Android 7 无需配对码）
 adb devices                       # 看到 device 才算成功；offline 就 adb disconnect 再连
-adb install -r dist\BabyTV-v1.1.19-tv-release.apk      # 电视
-adb install -r dist\BabyTV-v1.1.19-mobile-release.apk  # 手机 / 平板
+adb install -r dist\BabyTV-v1.1.22-tv-release.apk      # 电视
+adb install -r dist\BabyTV-v1.1.22-mobile-release.apk  # 手机 / 平板
 ```
 
 > 电视包名：`com.babytv.tv`；手机/平板包名：`com.babytv.mobile`（debug 分别加 `.debug` 后缀）。两个包独立，可同时安装在一台设备上。
@@ -370,7 +370,7 @@ adb shell input keyevent 4    # BACK
 
 ### 4.1 首次安装（U 盘，最稳）
 
-1. Releases 页下载：电视用 `BabyTV-v1.1.19-tv-release.apk`；手机/平板用 `BabyTV-v1.1.19-mobile-release.apk`。
+1. Releases 页下载：电视用 `BabyTV-v1.1.22-tv-release.apk`；手机/平板用 `BabyTV-v1.1.22-mobile-release.apk`。
 2. 拷到 U 盘根目录 → 插设备 → 打开「文件管理/U盘」→ 点击 APK。
 3. 弹出「禁止安装未知来源」→ 允许该文件管理器安装。
 4. 安装完成后在电视「我的应用」/ 手机桌面找到 **BabyTV**。
@@ -388,8 +388,8 @@ adb shell input keyevent 4    # BACK
 
 ```powershell
 adb connect <设备IP>:5555
-adb install -r dist\BabyTV-v1.1.19-tv-release.apk      # 电视
-adb install -r dist\BabyTV-v1.1.19-mobile-release.apk  # 手机 / 平板
+adb install -r dist\BabyTV-v1.1.22-tv-release.apk      # 电视
+adb install -r dist\BabyTV-v1.1.22-mobile-release.apk  # 手机 / 平板
 adb shell am start -n com.babytv.tv/com.babytv.tv.MainActivity
 adb shell am start -n com.babytv.mobile/com.babytv.tv.MainActivity
 adb logcat -v time | Select-String -Pattern "babytv|AndroidRuntime|chromium"
@@ -409,7 +409,7 @@ adb logcat -v time | Select-String -Pattern "babytv|AndroidRuntime|chromium"
 ```
 
 - 电视权限（悬浮窗/使用情况/无障碍/后台）**全部可选**；手机/平板只提示「后台运行」，不授权也能正常答题。
-- 回家长页：电视**连按 `↑` 5 次**；手机/平板点右上「家长」或长按题干 1.5 秒。
+- 回家长页：电视**长按返回键 3 秒**（或 `↑` 选中右上角「家长」按 `OK`）；手机/平板点右上「家长」或长按题干 1.5 秒。
 - 家长密码遗忘：`adb shell pm clear com.babytv.tv`（或 `com.babytv.mobile`）重置（会清空进度）。
 
 ### 4.4 装机常见失败
@@ -505,6 +505,9 @@ adb logcat -v time | Select-String -Pattern "babytv|AndroidRuntime|chromium"
 adb shell appops set com.babytv.tv SYSTEM_ALERT_WINDOW allow      # 悬浮窗
 adb shell appops set com.babytv.tv GET_USAGE_STATS allow          # 使用情况访问
 ```
+
+**Q12：剩余观看时间准不准？为什么一进去显示 10 分钟？**
+「可以去看动画啦」面板现在显示的是**精确到秒**的倒计时（如「还剩 9:58」），数值来自服务端毫秒级的 `credit_ms`，本地每秒递减；刚解锁时是完整的 10:00，所以第一眼看到「10 分钟」。它只有在门禁服务运行、且孩子在看别的应用时才会真正减少；如果服务被系统杀掉或没有悬浮窗/使用情况权限，它不会动，但 12 分钟的墙钟安全网会强制归零并回到答题。家长页「门禁诊断」里的「剩余」同样精确到秒。
 
 ---
 

@@ -247,6 +247,8 @@
   var panelSeconds = 0;
   var panelMinutes = 0;
   var panelTitle = "";
+  var panelLeftSec = 0;
+  var panelDeadline = 0;
   var panelCanceled = false;
   var inGate = false;
   try { inGate = !!(window.SOTVNative && typeof window.SOTVNative.isGate === "function" && window.SOTVNative.isGate()); } catch (e) { }
@@ -261,6 +263,15 @@
     if (doneBox) doneBox.className = "";
     panelKind = "";
     panelCanceled = false;
+    panelLeftSec = 0;
+    panelDeadline = 0;
+  }
+
+  function fmtTime(sec) {
+    sec = Math.max(0, Math.round(sec));
+    var m = Math.floor(sec / 60);
+    var s = sec % 60;
+    return m + ":" + (s < 10 ? "0" : "") + s;
   }
 
   function panelShown() {
@@ -280,7 +291,12 @@
       doneText.textContent = "这一轮还没答对 5 题，马上再来一轮" + tail;
     } else if (panelKind === "watch") {
       doneTitle.textContent = panelTitle || "可以去看动画啦";
-      doneText.textContent = (panelMinutes > 0 ? "还剩约 " + panelMinutes + " 分钟，去看动画吧" : "去看动画吧") + tail;
+      if (panelLeftSec > 0) {
+        doneText.textContent = "还剩 " + fmtTime(panelLeftSec) + " 可以看电视，快去吧" + tail;
+      } else {
+        doneTitle.textContent = "观看时间到啦";
+        doneText.textContent = "回去答题才能继续看哦" + tail;
+      }
     } else if (panelKind === "blocked") {
       doneTitle.textContent = panelTitle || "今天不能看电视了";
       doneText.textContent = "找家长帮忙吧（长按返回键进家长）";
@@ -294,7 +310,8 @@
   function cancelPanelCountdown() {
     if (!panelShown() || panelCanceled) return;
     panelCanceled = true;
-    if (panelTimer) { clearInterval(panelTimer); panelTimer = null; }
+    // watch 面板保留计时器：剩余观看时间继续按秒走；其他面板停掉退出倒计时
+    if (panelKind !== "watch" && panelTimer) { clearInterval(panelTimer); panelTimer = null; }
     panelText();
     toast("长按返回键进家长");
   }
@@ -311,7 +328,7 @@
   // kind = "done"：答对 5 题（可以去看电视了）；"retry"：这一轮没达标；
   //        "rest"：家长设置的休息时段内；"watch"：还有剩余观看时长；
   //        "blocked"：额度/轮次/时段用完（不自动退出，等家长）。
-  function showPanel(kind, minutesLeft, title) {
+  function showPanel(kind, minutesLeft, title, exactSeconds) {
     if (!doneBox) return;
     clearAnswerTimers();
     hideDone();
@@ -322,17 +339,24 @@
     panelMinutes = minutesLeft || 0;
     panelTitle = title || "";
     panelCanceled = false;
+    panelLeftSec = (kind === "watch") ? Math.max(0, Math.round(exactSeconds || panelMinutes * 60)) : 0;
+    panelDeadline = Date.now() + panelLeftSec * 1000;
     panelSeconds = kind === "rest" ? 10 : (kind === "retry" ? 5 : (kind === "watch" ? 10 : (kind === "blocked" ? 0 : 8)));
     if (kind === "watch" && inGate) panelSeconds = 0;   // 门禁浮层内不自动退出
     panelText();
     doneBox.className = "show";
-    if (panelSeconds > 0) {
+    if (panelSeconds > 0 || kind === "watch") {
       panelTimer = setInterval(function () {
-        panelSeconds = panelSeconds - 1;
-        if (panelSeconds <= 0) {
-          if (kind === "retry") { hideDone(); nextRound(); }
-          else exitApp();
-          return;
+        if (kind === "watch" && panelDeadline > 0) {
+          panelLeftSec = Math.max(0, Math.round((panelDeadline - Date.now()) / 1000));
+        }
+        if (!panelCanceled) {
+          panelSeconds = panelSeconds - 1;
+          if (panelSeconds <= 0) {
+            if (kind === "retry") { hideDone(); nextRound(); }
+            else exitApp();
+            return;
+          }
         }
         panelText();
       }, 1000);
@@ -508,8 +532,8 @@
         return;
       }
       if (data.watching) {
-        var leftMin = (data.status && data.status.remainingSeconds) ? Math.max(1, Math.round(data.status.remainingSeconds / 60)) : 0;
-        showPanel("watch", leftMin, "可以去看动画啦");
+        var leftSec = (data.status && data.status.remainingSeconds) ? Math.max(0, Number(data.status.remainingSeconds)) : 0;
+        showPanel("watch", Math.ceil(leftSec / 60), "可以去看动画啦", leftSec);
         return;
       }
       if (data.reviewed) { toast("已批改"); nextRound(); return; }
