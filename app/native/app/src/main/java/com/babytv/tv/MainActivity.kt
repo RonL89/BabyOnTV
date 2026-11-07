@@ -12,8 +12,7 @@ open class MainActivity : Activity() {
     protected lateinit var web: WebView
     private var webReleased = false
     private var page = "quiz"
-    private var okDownAt = 0L
-    private var okDown = false
+    private var backDownAt = 0L
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -24,6 +23,8 @@ open class MainActivity : Activity() {
             startActivity(Intent(this, OnboardingActivity::class.java)); finish(); return
         }
         DeviceRuntime.ensure(this)
+        // 孩子重新打开 App：解除家长「退出应用」后的 30 分钟暂停
+        if (this !is GateActivity) DeviceRuntime.store.set("gate_hold_until", "0")
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         if (DeviceBridge.isTv(this)) requestedOrientation = android.content.pm.ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE
         val reason = intent.getStringExtra("reason")
@@ -79,21 +80,22 @@ open class MainActivity : Activity() {
     }
 
     override fun dispatchKeyEvent(event: KeyEvent): Boolean {
-        // 长按 OK 3 秒进家长页（避免与 ↑ 选中「家长」按钮冲突、也避免误触）
-        val isOk = event.keyCode == KeyEvent.KEYCODE_DPAD_CENTER ||
-            event.keyCode == KeyEvent.KEYCODE_ENTER || event.keyCode == KeyEvent.KEYCODE_NUMPAD_ENTER
-        if (isOk) {
+        // 长按返回键 3 秒进家长页；短按返回键交给网页（答题页提示、面板页取消倒计时）
+        if (event.keyCode == KeyEvent.KEYCODE_BACK) {
             if (event.action == KeyEvent.ACTION_DOWN) {
-                okDown = true; okDownAt = android.os.SystemClock.elapsedRealtime()
+                val now = android.os.SystemClock.elapsedRealtime()
+                if (event.repeatCount == 0) {
+                    backDownAt = now
+                    if (::web.isInitialized && !webReleased) web.evaluateJavascript("window.TV&&TV.back()", null)
+                } else if (backDownAt > 0 && now - backDownAt >= 3000) {
+                    backDownAt = 0
+                    startActivity(Intent(this, ParentActivity::class.java))
+                    return true
+                }
             } else if (event.action == KeyEvent.ACTION_UP) {
-                okDown = false
+                backDownAt = 0
             }
-        }
-        if (okDown && isOk && event.action == KeyEvent.ACTION_DOWN && event.repeatCount > 0 &&
-            android.os.SystemClock.elapsedRealtime() - okDownAt >= 3000
-        ) {
-            okDown = false
-            startActivity(Intent(this, ParentActivity::class.java)); return true
+            return true
         }
         if (!DeviceBridge.isTv(this) && event.keyCode == KeyEvent.KEYCODE_ENTER) return super.dispatchKeyEvent(event)
         val action = when (event.keyCode) {
@@ -103,7 +105,6 @@ open class MainActivity : Activity() {
             KeyEvent.KEYCODE_DPAD_DOWN -> "move('down')"
             KeyEvent.KEYCODE_DPAD_CENTER, KeyEvent.KEYCODE_ENTER, KeyEvent.KEYCODE_NUMPAD_ENTER -> "select()"
             KeyEvent.KEYCODE_MENU, KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE -> "replay()"   // 再听一遍
-            KeyEvent.KEYCODE_BACK -> "back()"
             else -> return super.dispatchKeyEvent(event)
         }
         if (event.action == KeyEvent.ACTION_DOWN && ::web.isInitialized && !webReleased) web.evaluateJavascript("window.TV&&TV.$action", null)

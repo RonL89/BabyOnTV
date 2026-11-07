@@ -31,6 +31,9 @@ open class DeviceBridge(protected val activity: Activity, private val connection
     fun apiToken(): String = AdminAuth.deviceToken
 
     @JavascriptInterface
+    fun isGate(): Boolean = false
+
+    @JavascriptInterface
     fun deviceInfo(): String = JSONObject().put("platform", if (isTv(activity)) "android-tv" else "android")
         .put("model", Build.MODEL).put("version", BuildConfig.VERSION_NAME).toString()
 

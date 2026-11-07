@@ -72,7 +72,13 @@ class LearningEngine(private val store: LocalStore) {
         }
         val used = number("used_ms")
         val rounds = store.roundsDoneToday()
+        // 家长设置的休息时段 / 家长「退出应用」后的 30 分钟：都不锁屏、不计时
+        val nowMs = System.currentTimeMillis()
+        val pauseUntil = store.get("pause_until").toLongOrNull() ?: 0L
+        val holdUntil = store.get("gate_hold_until").toLongOrNull() ?: 0L
         val reason = when {
+            pauseUntil > nowMs -> "paused"
+            holdUntil > nowMs -> "hold"
             used >= c.getLong("dailyMinutes") * 60000 -> "quota"
             remaining <= 0 && rounds >= c.getInt("roundsPerDay") -> "rounds"
             !inWindow(c) -> "schedule"

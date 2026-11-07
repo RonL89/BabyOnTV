@@ -232,6 +232,12 @@ class ParentActivity : Activity() {
     }
 
     private fun quitApp() {
+        // 家长主动退出：停门禁，并在 30 分钟内不再自动弹学习页（孩子重新打开 App 会解除）
+        try {
+            DeviceRuntime.ensure(this)
+            DeviceRuntime.store.set("gate_hold_until", (System.currentTimeMillis() + 30 * 60 * 1000L).toString())
+        } catch (_: Exception) {
+        }
         try {
             stopService(Intent(this, GateService::class.java))
         } catch (_: Exception) {

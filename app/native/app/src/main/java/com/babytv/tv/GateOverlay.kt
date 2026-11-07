@@ -25,25 +25,33 @@ class GateOverlay(
     private var web: WebView? = null
     private var attached = false
     private var currentReason = ""
-    private var upCount = 0
-    private var lastUp = 0L
+    private var backDownAt = 0L
+    private val bridge = Bridge()
     val isShowing: Boolean get() = attached
 
     fun show(reason: String): Boolean {
         if (attached) return true
         val page = if (reason == "timeup") "quiz" else "lock?reason=$reason"
         val view = web ?: WebShell(context).create("about:blank").also { created ->
-            created.addJavascriptInterface(Bridge(), "SOTVNative")
+            created.addJavascriptInterface(bridge, "SOTVNative")
             created.setOnKeyListener { _, key, event ->
-                if (event.action != KeyEvent.ACTION_DOWN) return@setOnKeyListener key == KeyEvent.KEYCODE_BACK
-                if (key == KeyEvent.KEYCODE_DPAD_UP && event.repeatCount == 0) {
-                    val now = android.os.SystemClock.elapsedRealtime()
-                    upCount = if (now - lastUp < 900) upCount + 1 else 1
-                    lastUp = now
-                    if (upCount >= 5) { upCount = 0; Bridge().openParent(); return@setOnKeyListener true }
-                } else if (event.repeatCount == 0) upCount = 0
-                if (key == KeyEvent.KEYCODE_BACK) return@setOnKeyListener true
+                // 长按返回键 3 秒进家长页；短按返回键不放行（防止孩子退出学习页）
+                if (key == KeyEvent.KEYCODE_BACK) {
+                    if (event.action == KeyEvent.ACTION_DOWN) {
+                        val now = android.os.SystemClock.elapsedRealtime()
+                        if (event.repeatCount == 0) backDownAt = now
+                        else if (backDownAt > 0 && now - backDownAt >= 3000) {
+                            backDownAt = 0
+                            bridge.openParent()
+                            return@setOnKeyListener true
+                        }
+                    } else if (event.action == KeyEvent.ACTION_UP) {
+                        backDownAt = 0
+                    }
+                    return@setOnKeyListener true
+                }
                 WebShell(context).dispatchKey(created, key, event)
+                true
             }
             web = created
             currentReason = reason
@@ -84,6 +92,7 @@ class GateOverlay(
 
     private inner class Bridge {
         @JavascriptInterface fun apiToken(): String = AdminAuth.deviceToken
+        @JavascriptInterface fun isGate(): Boolean = true
         @JavascriptInterface fun deviceInfo(): String = org.json.JSONObject()
             .put("platform", if (DeviceBridge.isTv(context)) "android-tv" else "android").toString()
         @JavascriptInterface fun answerInput(voice: Boolean) {
@@ -100,11 +109,7 @@ class GateOverlay(
             }
         }
         @JavascriptInterface fun exitToLauncher() {
-            handler.post {
-                hide()
-                if (goHome?.invoke() != true) context.startActivity(Intent(Intent.ACTION_MAIN)
-                    .addCategory(Intent.CATEGORY_HOME).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
-            }
+            // 门禁浮层里不允许退出（否则浮层收起→1.8 秒后又拉起，会闪烁）；家长走长按返回键
         }
     }
 

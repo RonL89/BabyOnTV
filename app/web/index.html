@@ -235,6 +235,8 @@
 
   // ---------- 退出 / 本轮完成 / 家长设置的休息时段 ----------
   function exitApp() {
+    if (inGate) return;   // 门禁浮层内不允许退出（家长走长按返回键）
+    clearAnswerTimers();
     hideDone();
     nativeCall("exitToLauncher");
     try { window.close(); } catch (e) { }   // 纯浏览器（没有原生壳）时尽量关掉自己
@@ -242,61 +244,99 @@
 
   var panelTimer = null;
   var panelKind = "";
+  var panelSeconds = 0;
+  var panelMinutes = 0;
+  var panelTitle = "";
+  var panelCanceled = false;
+  var inGate = false;
+  try { inGate = !!(window.SOTVNative && typeof window.SOTVNative.isGate === "function" && window.SOTVNative.isGate()); } catch (e) { }
+  var answerTimers = [];
+  function clearAnswerTimers() {
+    for (var i = 0; i < answerTimers.length; i++) clearTimeout(answerTimers[i]);
+    answerTimers = [];
+  }
 
   function hideDone() {
     if (panelTimer) { clearInterval(panelTimer); panelTimer = null; }
     if (doneBox) doneBox.className = "";
     panelKind = "";
+    panelCanceled = false;
   }
 
   function panelShown() {
     return !!(doneBox && doneBox.className === "show");
   }
 
-  // 遥控器按 OK：完成页/休息页直接走；「还差一点」页立刻开新一轮
+  function panelText() {
+    var tail;
+    if (panelCanceled) tail = "（按 OK 回桌面 · 长按返回键进家长）";
+    else if (panelKind === "blocked") tail = "（长按返回键进家长）";
+    else tail = "（" + panelSeconds + " 秒后" + (panelKind === "retry" ? "开始" : "回桌面") + "）";
+    if (panelKind === "rest") {
+      doneTitle.textContent = "休息时间到啦";
+      doneText.textContent = "还有约 " + panelMinutes + " 分钟休息时间" + tail;
+    } else if (panelKind === "retry") {
+      doneTitle.textContent = "还差一点点";
+      doneText.textContent = "这一轮还没答对 5 题，马上再来一轮" + tail;
+    } else if (panelKind === "watch") {
+      doneTitle.textContent = panelTitle || "可以去看动画啦";
+      doneText.textContent = (panelMinutes > 0 ? "还剩约 " + panelMinutes + " 分钟，去看动画吧" : "去看动画吧") + tail;
+    } else if (panelKind === "blocked") {
+      doneTitle.textContent = panelTitle || "今天不能看电视了";
+      doneText.textContent = "找家长帮忙吧（长按返回键进家长）";
+    } else {
+      doneTitle.textContent = "太棒了！这一轮完成啦";
+      doneText.textContent = "答对 5 题，休息一下眼睛吧" + tail;
+    }
+  }
+
+  // 家长/孩子按了方向键或返回键：停掉倒计时，把家长入口留住
+  function cancelPanelCountdown() {
+    if (!panelShown() || panelCanceled) return;
+    panelCanceled = true;
+    if (panelTimer) { clearInterval(panelTimer); panelTimer = null; }
+    panelText();
+    toast("长按返回键进家长");
+  }
+
+  // 遥控器按 OK：完成/休息/观看页回桌面；「还差一点」开新一轮；额度用完只提示找家长
   function panelConfirm() {
     if (!panelShown()) return false;
     if (panelKind === "retry") { hideDone(); nextRound(); }
+    else if (panelKind === "blocked") { toast("找家长帮忙吧（长按返回键进家长）"); }
     else exitApp();
     return true;
   }
 
   // kind = "done"：答对 5 题（可以去看电视了）；"retry"：这一轮没达标；
-  //        "rest"：家长设置的休息时段内；"watch"：还有剩余观看时长/额度用完的提示（会自动回桌面）。
+  //        "rest"：家长设置的休息时段内；"watch"：还有剩余观看时长；
+  //        "blocked"：额度/轮次/时段用完（不自动退出，等家长）。
   function showPanel(kind, minutesLeft, title) {
     if (!doneBox) return;
+    clearAnswerTimers();
     hideDone();
     // 收起选项，避免孩子隔着面板点到上一题的残留卡片
     optionsBox.innerHTML = "";
     cards = [];
     panelKind = kind;
-    var seconds = kind === "rest" ? 10 : (kind === "retry" ? 5 : (kind === "watch" ? 6 : 8));
-    function paint() {
-      if (kind === "rest") {
-        doneTitle.textContent = "休息时间到啦";
-        doneText.textContent = "还有约 " + (minutesLeft || 0) + " 分钟休息时间（" + seconds + " 秒后自动关闭）";
-      } else if (kind === "retry") {
-        doneTitle.textContent = "还差一点点";
-        doneText.textContent = "这一轮还没答对 5 题，马上再来一轮（" + seconds + " 秒后开始）";
-      } else if (kind === "watch") {
-        doneTitle.textContent = title || "可以去看动画啦";
-        doneText.textContent = (minutesLeft > 0 ? "还剩约 " + minutesLeft + " 分钟，去看动画吧" : "去看动画吧") + "（" + seconds + " 秒后回桌面）";
-      } else {
-        doneTitle.textContent = "太棒了！这一轮完成啦";
-        doneText.textContent = "答对 5 题，休息一下眼睛吧（" + seconds + " 秒后去看电视）";
-      }
-    }
-    paint();
+    panelMinutes = minutesLeft || 0;
+    panelTitle = title || "";
+    panelCanceled = false;
+    panelSeconds = kind === "rest" ? 10 : (kind === "retry" ? 5 : (kind === "watch" ? 10 : (kind === "blocked" ? 0 : 8)));
+    if (kind === "watch" && inGate) panelSeconds = 0;   // 门禁浮层内不自动退出
+    panelText();
     doneBox.className = "show";
-    panelTimer = setInterval(function () {
-      seconds = seconds - 1;
-      if (seconds <= 0) {
-        if (kind === "retry") { hideDone(); nextRound(); }
-        else exitApp();
-        return;
-      }
-      paint();
-    }, 1000);
+    if (panelSeconds > 0) {
+      panelTimer = setInterval(function () {
+        panelSeconds = panelSeconds - 1;
+        if (panelSeconds <= 0) {
+          if (kind === "retry") { hideDone(); nextRound(); }
+          else exitApp();
+          return;
+        }
+        panelText();
+      }, 1000);
+    }
   }
 
   // 用 XHR 而不是 fetch：Android 7 自带 WebView 可能低于 Chrome 57
@@ -333,6 +373,7 @@
 
   function render(r) {
     round = r;
+    clearAnswerTimers();
     hideDone();
     // 关键：答题成功时服务端会直接返回下一题（result.next），走的是 render 而不是 nextRound，
     // 这里必须解除锁定，否则答完第一题后 locked 永远为 true，第二题遥控器/触摸全部失效。
@@ -432,7 +473,9 @@
 
   // 遥控器上下：选项卡片 ⇄ 家长（↑）/ 再听一遍（↓）
   function moveZone(dir) {
-    if (locked || panelShown() || !cards.length) return;
+    if (locked) return;
+    if (panelShown()) { cancelPanelCountdown(); return; }
+    if (!cards.length) return;
     if (dir === "up") {
       if (zone === "card") { zone = "action"; actionIndex = 0; }
       else if (actionIndex === 0) zone = "card";
@@ -461,7 +504,7 @@
       if (data.pending) { toast("等待家长批改"); return; }
       if (data.blocked) {
         var blockedText = { quota: "今天观看时长用完啦", rounds: "今天的轮次用完啦", schedule: "还没到开放时段" }[data.blocked] || "今天的学习时间结束啦";
-        showPanel("watch", 0, blockedText);
+        showPanel("blocked", 0, blockedText);
         return;
       }
       if (data.watching) {
@@ -514,17 +557,17 @@
         var arr = result.correctIndices || [];
         var answerIndex = arr.length ? Number(arr[0]) : -1;
         if (answerIndex >= 0 && cards[answerIndex]) {
-          setTimeout(function () {
+          answerTimers.push(setTimeout(function () {
             cards[answerIndex].className += " correct";
             play(audioName(round.question, answerIndex));
-          }, 1500);
+          }, 1500));
         }
       }
-      setTimeout(function () {
+      answerTimers.push(setTimeout(function () {
         if (result.finished) { showPanel(result.passed ? "done" : "retry", 0); return; }
         if (result.next && result.next.question) render(result.next);
         else nextRound();
-      }, correct ? 1500 : 3600);
+      }, correct ? 1500 : 3600));
     }, function (status) {
       locked = false;
       toast(status === 403 ? "请用 BabyTV App 作答" : "网络异常（" + (status || "无响应") + "）");
@@ -544,8 +587,11 @@
       choose(focus);
     },
     replay: function () { replay(); },
-    // 遥控器返回键不再退出：必须答对 5 题，或由家长在家长页退出
-    back: function () { toast("答对 5 题就可以去看电视啦"); }
+    // 遥控器返回键：面板上取消倒计时（长按返回键进家长）；答题页只提示
+    back: function () {
+      if (panelShown()) { cancelPanelCountdown(); return; }
+      toast("答对 5 题就可以去看电视啦");
+    }
   };
 
   // 再听一遍：重播当前题干（遥控器 MENU 键）
@@ -569,7 +615,7 @@
     else if (k === "m" || k === "M") { e.preventDefault(); replay(); }
   });
 
-  window.SOTV_RESUME = function () { if (!round) nextRound(); };
+  window.SOTV_RESUME = function () { if (!locked) nextRound(); };
 
   // ---------- 手机 / 平板：触摸操作 ----------
   if (isTouch && hintBox) hintBox.textContent = "点选项作答 · 长按题干进家长";

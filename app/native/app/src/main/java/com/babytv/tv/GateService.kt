@@ -81,6 +81,13 @@ class GateService : Service() {
             Prefs.appendGateLog(this, sig)
         }
 
+        // 休息时段 / 家长退出后的 30 分钟：不锁屏、不计时
+        if (reason == "paused" || reason == "hold") {
+            wasUsing = false
+            hideAll()
+            return
+        }
+
         if (!awake || !monitoring || (reason.isEmpty() && !feedbackVisible) || (pkg != null && exempt(pkg, false))) hideAll()
         if (protecting && reason.isNotEmpty() && now - lastGate > 1800 && !hasGate()) {
             val shown = WatchAccessibilityService.showGate(reason) || (canOverlay && overlay.show(reason))

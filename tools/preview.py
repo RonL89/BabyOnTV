@@ -23,6 +23,10 @@ PORT = int(os.environ.get("PREVIEW_PORT", "8123"))
 PAUSE_MINUTES = int(os.environ.get("PREVIEW_PAUSE_MINUTES", "0"))
 # 模拟还有剩余观看时长（分钟），用于验证「可以去看动画啦」页面
 WATCH_MINUTES = int(os.environ.get("PREVIEW_WATCH_MINUTES", "0"))
+# 模拟额度用完（quota/rounds/schedule），用于验证 blocked 面板
+BLOCKED_REASON = os.environ.get("PREVIEW_BLOCKED", "")
+# 模拟门禁浮层（isGate=true，页面不允许自己退出）
+GATE = os.environ.get("PREVIEW_GATE", "") == "1"
 TARGET_PER_ROUND = 5        # 与 App 的 questionsPerRound 默认值一致
 
 DATA = json.load(open(SEED, encoding="utf-8"))
@@ -32,6 +36,7 @@ RETRY = []                  # 错题队列：[题目 id, 还要隔几题]
 
 SHIM = """
 <script>
+window.__BTV_GATE = __GATE__;
 (function () {
   var audio = null;
   function player() {
@@ -51,6 +56,7 @@ SHIM = """
     },
     stopAudio: function () { if (audio) { try { audio.pause(); } catch (e) {} } },
     apiToken: function () { return "preview"; },
+    isGate: function () { return window.__BTV_GATE === true; },
     openParent: function () { window.__BTV_PARENT = true; },
     exitToLauncher: function () { window.__BTV_EXITED = true; }
   };
@@ -120,7 +126,7 @@ class Handler(BaseHTTPRequestHandler):
         path = self.path.split("?")[0]
         if path in ("/", "/index.html"):
             html = open(PAGE, encoding="utf-8").read()
-            html = html.replace("<body>", "<body>" + SHIM, 1)
+            html = html.replace("<body>", "<body>" + SHIM.replace("__GATE__", "true" if GATE else "false"), 1)
             return self._send(200, html, "text/html; charset=utf-8")
         if path.startswith("/audio/"):
             name = os.path.basename(path[len("/audio/"):])
@@ -147,6 +153,8 @@ class Handler(BaseHTTPRequestHandler):
                 return self._json({"paused": True, "minutesLeft": PAUSE_MINUTES})
             if WATCH_MINUTES > 0:
                 return self._json({"watching": True, "status": {"remainingSeconds": WATCH_MINUTES * 60}})
+            if BLOCKED_REASON:
+                return self._json({"blocked": BLOCKED_REASON})
             rnd = STATE.get("round") or new_round()
             return self._json(rnd)
 
