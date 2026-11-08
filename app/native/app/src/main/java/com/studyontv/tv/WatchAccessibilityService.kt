@@ -12,7 +12,10 @@ class WatchAccessibilityService : AccessibilityService() {
         if (event?.eventType == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) {
             val pkg = event.packageName?.toString()
             if (pkg != null && (pkg.contains("inputmethod") || pkg.contains("keyboard"))) return
-            if (!GateService.hasGate() || pkg != packageName) Foreground.update(pkg)
+            // 忽略自家悬浮窗（锚点 1x1 / 倒计时 / 门禁）产生的事件：它们会把真实前台（视频/聚好看）
+            // 误判成本应用，导致 active=false、余额不扣减、门禁永不弹出（海信 VIDAA 实测）。
+            // 本应用自身的前台状态由 resumeOwn/pauseOwn（Activity 生命周期）跟踪，这里无需再更新。
+            if (pkg != packageName) Foreground.update(pkg)
             // 无障碍服务由系统常驻，顺便充当看门狗：管理服务被系统清理后在下一次切换应用时拉起
             if (!GateService.running) GateService.ensureRunning(this, "accessibility")
             GateService.onForegroundChanged(this, pkg)
