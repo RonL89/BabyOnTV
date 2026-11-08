@@ -4,20 +4,27 @@
     android:height="180dp"
     android:viewportWidth="320"
     android:viewportHeight="180">
+    <!-- 深色底 -->
     <path
-        android:fillColor="#0A0F1C"
+        android:fillColor="#141414"
         android:pathData="M0,0 H320 V180 H0 Z" />
+    <!-- 橙色圆角 logo 底 -->
     <path
-        android:fillColor="#1D4ED8"
-        android:pathData="M0,0 H320 V180 H0 Z"
-        android:fillAlpha="0.25" />
-    <path
-        android:fillColor="#3B82F6"
-        android:pathData="M40,66 H88 A14,14 0 0 1 102,80 V94 A14,14 0 0 1 88,108 H40 A14,14 0 0 1 26,94 V80 A14,14 0 0 1 40,66 Z" />
+        android:fillColor="#FF8A3D"
+        android:pathData="M30,44 H98 A20,20 0 0 1 118,64 V116 A20,20 0 0 1 98,136 H30 A20,20 0 0 1 10,116 V64 A20,20 0 0 1 30,44 Z" />
+    <!-- 白色播放三角 -->
     <path
         android:fillColor="#FFFFFF"
-        android:pathData="M55,78 L77,87 L55,96 Z" />
+        android:pathData="M52,66 L92,90 L52,114 Z" />
+    <!-- 微笑弧 -->
     <path
-        android:fillColor="#E8EEF9"
-        android:pathData="M120,72 H276 V82 H120 Z M120,92 H240 V102 H120 Z" />
+        android:fillColor="#00000000"
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="5"
+        android:strokeLineCap="round"
+        android:pathData="M56,124 Q66,132 76,124" />
+    <!-- 右侧文字占位条 -->
+    <path
+        android:fillColor="#F2F2F4"
+        android:pathData="M140,66 H292 V84 H140 Z M140,96 H240 V114 H140 Z" />
 </vector>

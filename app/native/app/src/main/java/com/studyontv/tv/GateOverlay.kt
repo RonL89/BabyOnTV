@@ -49,7 +49,7 @@ class GateOverlay(
         val params = WindowManager.LayoutParams(-1, -1, windowType,
             WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN, PixelFormat.OPAQUE)
         params.gravity = Gravity.TOP or Gravity.START
-        params.title = "StudyOnTV gate"
+        params.title = "BabyOnTV gate"
         return try {
             view.visibility = View.VISIBLE
             manager.addView(view, params)

@@ -100,9 +100,9 @@ class UpdateActivity : Activity() {
         }
         secondary.addView(TvUi.button(this, "手动下载") {
             try {
-                startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(Pgyer.pageUrl)))
+                startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://github.com/RonL89/BabyOnTV/releases/latest")))
             } catch (e: Exception) {
-                status.text = "这台设备没有可用浏览器，请用手机或电脑访问 " + Pgyer.pageUrl
+                status.text = "这台设备没有可用浏览器，请用手机或电脑访问 https://github.com/RonL89/BabyOnTV/releases/latest"
                 Diag.error("Update", "cannot open manual download page", e)
             }
         }, LinearLayout.LayoutParams(0, dp(if (tv) 52 else 48), 1f).apply {

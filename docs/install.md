@@ -2,7 +2,7 @@
 
 ## 安装到手机或平板
 
-优先从 [GitHub Release](https://github.com/RonL89/BabyOnTV/releases/latest) 下载对应设备的正式 APK。无法访问 GitHub 时，可使用蒲公英备用入口：[手机 / 平板](https://www.pgyer.com/StudyOnTVMobile)、[TV](https://www.pgyer.com/StudyOnTVTV)。手机和平板直接打开 APK 安装，允许当前下载工具安装应用。手机默认竖屏，平板支持横竖屏；电视支持遥控器。
+优先从 [GitHub Release](https://github.com/RonL89/BabyOnTV/releases/latest) 下载对应设备的正式 APK（电视 `BabyOnTV-TV-v*.apk`，手机 / 平板 `BabyOnTV-Mobile-v*.apk`）。手机和平板直接打开 APK 安装，允许当前下载工具安装应用。手机默认竖屏，平板支持横竖屏；电视支持遥控器。
 
 首次打开先设置管理密码，随后可按需开启权限；不开权限也能进入家长设置或学习。电视无法开启无障碍时，可以使用悬浮窗管理。在另一台家长设备上扫码，输入管理密码连接。受控设备本身也可以通过连续点击标题 5 次，或短按遥控器「上」5 次，再输入密码重新打开连接页。
 
@@ -55,10 +55,10 @@
 复制下面这段发给任意能执行命令的 AI Agent（Claude Code、Cursor、Codex、通义灵码、WorkBuddy 等都行）：
 
 ```
-帮我在这台电视上安装 StudyOnTV。ADB 调试已经开好了。
+帮我在这台电视上安装 BabyOnTV。ADB 调试已经开好了。
 电视 IP：<填>
 
-1. 优先从 https://github.com/RonL89/BabyOnTV/releases/latest 下载 TV APK；无法访问时再从 https://www.pgyer.com/StudyOnTVTV 下载
+1. 优先从 https://github.com/RonL89/BabyOnTV/releases/latest 下载 TV APK；无法访问时再从 https://github.com/RonL89/BabyOnTV/releases/latest 下载
 2. adb connect <IP>:5555，然后 adb devices 确认设备出现；
    没出现就等我到电视上点「允许」，还是不行再告诉我怎么处理
 3. adb install -r <刚下载的 apk>
@@ -73,7 +73,7 @@
 ```bash
 adb connect 192.168.1.100:5555     # 换成电视 IP
 adb devices                        # 出现 device 才算成功
-adb install -r StudyOnTV.apk       # 看到 Success 就成了
+adb install -r BabyOnTV.apk       # 看到 Success 就成了
 adb shell monkey -p com.babyontv.tv -c android.intent.category.LAUNCHER 1
 ```
 
@@ -129,7 +129,7 @@ adb shell appops set com.babyontv.tv SYSTEM_ALERT_WINDOW allow
 
 **开机启动：** 首次打开并完成设置后，App 接收 Android 开机、部分电视快速开机与覆盖安装广播，尝试恢复前台管理服务。请在厂商设置中允许自启动和后台运行。小米等电视的遥控器待机、关机清后台未必触发 Android 开机广播；系统强制停止或厂商禁用后台启动时，仍需重新打开 App，不能保证自动恢复。
 
-**应用更新：** 家长面板可检查更新，默认优先蒲公英，失败再尝试 GitHub、CDN 与镜像。TV 和手机 / 平板分别更新，下载后核对包名、版本和签名；覆盖安装保留本机数据。需要调整「安装未知应用」权限时，可先由家长验证后进入系统设置。
+**应用更新：** 家长面板可检查更新，默认读取本仓库 GitHub Release（`RonL89/BabyOnTV`）。TV 和手机 / 平板分别更新，下载后核对包名、版本和签名；覆盖安装保留本机数据。需要调整「安装未知应用」权限时，可先由家长验证后进入系统设置。
 
 <img src="./screenshots/v0.3.0/setup-mobile.png" width="260" alt="手机权限页：未授权也可进入设置和学习">
 

@@ -46,7 +46,7 @@ class WebShell(private val context: Context) {
         s.displayZoomControls = false
         s.useWideViewPort = true
         s.loadWithOverviewMode = false
-        s.userAgentString = s.userAgentString + " StudyOnTV/0.1 (AndroidTV)"
+        s.userAgentString = s.userAgentString + " BabyOnTV/0.1 (AndroidTV)"
 
         web.webViewClient = object : WebViewClient() {
             override fun shouldOverrideUrlLoading(view: WebView?, url: String?): Boolean {

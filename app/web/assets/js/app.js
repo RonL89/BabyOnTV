@@ -170,6 +170,9 @@
   }
   function choose(index) {
     if (state.busy || !state.round) return;
+    // 触摸/点选时读出所点选项，让孩子知道读音
+    var qid = btvQid(state.round.question);
+    if (qid) btvAudio(qid + '_opt_' + index + '.mp3');
     if (state.round.question.type === 'multiple') {
       var pos = state.selected.indexOf(index);
       if (pos < 0) state.selected.push(index); else state.selected.splice(pos, 1);
@@ -368,7 +371,7 @@
       var secondary = dir === 'left' || dir === 'right' ? Math.abs(dy) : Math.abs(dx);
       if (primary > 8 && primary + secondary * 1.8 < score) { score = primary + secondary * 1.8; best = i; }
     });
-    if (best >= 0) { setFocus(best); if (dir === 'left' || dir === 'right') btvOptionAudio(); return true; }
+    if (best >= 0) { setFocus(best); btvOptionAudio(); return true; }
     return false;
   }
   function activate(el) {

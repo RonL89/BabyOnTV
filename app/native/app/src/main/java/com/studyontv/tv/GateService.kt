@@ -34,10 +34,9 @@ class GateService : Service() {
     }
     private var anchor: View? = null
     private lateinit var overlay: GateOverlay
-    private val countdown by lazy { CountdownOverlay(this) }
     private val tick = object : Runnable {
         override fun run() {
-            try { checkForeground() } catch (e: Exception) { android.util.Log.e("StudyOnTV", "Screen time check failed", e) }
+            try { checkForeground() } catch (e: Exception) { android.util.Log.e("BabyOnTV", "Screen time check failed", e) }
             handler.postDelayed(this, 1000)
         }
     }
@@ -56,7 +55,6 @@ class GateService : Service() {
         if (InputSupport.active) {
             wasUsing = false
             overlay.suspend(); WatchAccessibilityService.suspendGate()
-            countdown.hide()
             return
         }
         if (now < settingsUntil) { wasUsing = false; hideAll(); return }
@@ -117,21 +115,12 @@ class GateService : Service() {
                             .putExtra("reason", gateReason))
                     } catch (e: Exception) {
                         lastGateError = "startActivity: " + (e.message ?: e.javaClass.simpleName)
-                        android.util.Log.w("StudyOnTV", "Cannot open gate activity", e)
+                        android.util.Log.w("BabyOnTV", "Cannot open gate activity", e)
                     }
                     notifyGateFallback(gateReason)
                 }
             }
         }
-        updateCountdown(status, active, free, canOverlay)
-    }
-
-    /** 看电视期间在画面右上角显示剩余分钟数；不在看电视 / 拦截中 / 自由时段 / 家长解锁时隐藏 */
-    private fun updateCountdown(status: org.json.JSONObject, active: Boolean, free: Boolean, canOverlay: Boolean) {
-        val seconds = status.optLong("remainingSeconds") + status.optLong("freeQuotaSeconds")
-        val show = canOverlay && active && !free && status.optString("reason").isEmpty() &&
-            status.optJSONObject("override") == null && seconds > 0 && !hasGate()
-        if (show) countdown.update(seconds) else countdown.hide()
     }
 
     private fun updateAnchor(allowed: Boolean) {
@@ -145,13 +134,13 @@ class GateService : Service() {
                 WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE or
                     WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN, PixelFormat.TRANSLUCENT)
             params.gravity = Gravity.TOP or Gravity.START
-            params.title = "StudyOnTV anchor"
+            params.title = "BabyOnTV anchor"
             params.alpha = 0.01f
             try { manager.addView(view, params); anchor = view } catch (_: Exception) { }
         }
     }
 
-    private fun hideAll() { overlay.hide(); WatchAccessibilityService.hideGate(); countdown.hide() }
+    private fun hideAll() { overlay.hide(); WatchAccessibilityService.hideGate() }
 
     private val mediaTick = object : Runnable {
         override fun run() {
@@ -223,7 +212,7 @@ class GateService : Service() {
                 .setContentText("没自动弹出学习页时，点这里开始答题")
                 .setSmallIcon(android.R.drawable.ic_lock_idle_alarm).setContentIntent(pi)
                 .setAutoCancel(true).setOnlyAlertOnce(true).build())
-        } catch (e: Exception) { android.util.Log.w("StudyOnTV", "Cannot post fallback notification", e) }
+        } catch (e: Exception) { android.util.Log.w("BabyOnTV", "Cannot post fallback notification", e) }
     }
 
     /**
@@ -311,7 +300,7 @@ class GateService : Service() {
         if (Prefs.onboarded(this)) scheduleRestart(this, 5000)
         handler.removeCallbacks(tick); handler.removeCallbacks(mediaTick)
         MediaPause.release(this)
-        overlay.destroy(); WatchAccessibilityService.hideGate(); countdown.destroy(); updateAnchor(false)
+        overlay.destroy(); WatchAccessibilityService.hideGate(); updateAnchor(false)
         instance = null
         Prefs.setServiceRunning(this, false)
         Diag.info("Service", "GateService destroyed")
@@ -340,7 +329,7 @@ class GateService : Service() {
         fun ensureRunning(context: Context, via: String = "") {
             if (instance != null || !Prefs.onboarded(context)) return
             if (via.isNotEmpty()) startVia = via
-            try { start(context) } catch (e: Exception) { android.util.Log.w("StudyOnTV", "GateService restart refused", e) }
+            try { start(context) } catch (e: Exception) { android.util.Log.w("BabyOnTV", "GateService restart refused", e) }
         }
 
         fun scheduleRestart(context: Context, delayMs: Long) {
@@ -351,7 +340,7 @@ class GateService : Service() {
                     else PendingIntent.getService(context, 7, intent, flags)
                 val alarm = context.getSystemService(Context.ALARM_SERVICE) as android.app.AlarmManager
                 alarm.set(android.app.AlarmManager.ELAPSED_REALTIME_WAKEUP, SystemClock.elapsedRealtime() + delayMs, pending)
-            } catch (e: Exception) { android.util.Log.w("StudyOnTV", "Cannot schedule restart", e) }
+            } catch (e: Exception) { android.util.Log.w("BabyOnTV", "Cannot schedule restart", e) }
         }
         fun hasGate(): Boolean = WatchAccessibilityService.hasGate() || instance?.overlay?.isShowing == true
         /** 家长面板里的能力自检；不依赖服务是否在运行 */

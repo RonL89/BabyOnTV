@@ -32,7 +32,7 @@ class Watchdog : JobService() {
                 if (scheduler.allPendingJobs.any { it.id == JOB_ID }) return
                 scheduler.schedule(JobInfo.Builder(JOB_ID, ComponentName(context, Watchdog::class.java))
                     .setPeriodic(15 * 60 * 1000L).setPersisted(true).build())
-            } catch (e: Exception) { android.util.Log.w("StudyOnTV", "Cannot schedule watchdog", e) }
+            } catch (e: Exception) { android.util.Log.w("BabyOnTV", "Cannot schedule watchdog", e) }
         }
 
         /**
@@ -48,7 +48,7 @@ class Watchdog : JobService() {
                     android.app.PendingIntent.FLAG_UPDATE_CURRENT or android.app.PendingIntent.FLAG_IMMUTABLE)
                 manager.setInexactRepeating(android.app.AlarmManager.ELAPSED_REALTIME_WAKEUP,
                     SystemClock.elapsedRealtime() + 5 * 60 * 1000L, 15 * 60 * 1000L, pending)
-            } catch (e: Exception) { android.util.Log.w("StudyOnTV", "Cannot schedule revive alarm", e) }
+            } catch (e: Exception) { android.util.Log.w("BabyOnTV", "Cannot schedule revive alarm", e) }
         }
 
         const val REVIVE_ACTION = "com.studyontv.tv.REVIVE"

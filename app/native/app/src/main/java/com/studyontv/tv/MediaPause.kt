@@ -52,7 +52,7 @@ object MediaPause {
             if (audio.isMusicActive) { sendPause(audio); attempts = 1 }
             holding = audio.requestAudioFocus(listener, AudioManager.STREAM_MUSIC,
                 AudioManager.AUDIOFOCUS_GAIN) == AudioManager.AUDIOFOCUS_REQUEST_GRANTED
-        } catch (e: Exception) { android.util.Log.w("StudyOnTV", "Pause media failed", e) }
+        } catch (e: Exception) { android.util.Log.w("BabyOnTV", "Pause media failed", e) }
     }
 
     fun enforce(context: Context) {
@@ -77,7 +77,7 @@ object MediaPause {
             muted = true
             setMuted(audio, true)
             Diag.warn("Audio", "enforce: player ignored pause, muted music stream (original volume=$originalVolume, originally muted=$originalMuted)")
-        } catch (e: Exception) { android.util.Log.w("StudyOnTV", "Enforce pause failed", e) }
+        } catch (e: Exception) { android.util.Log.w("BabyOnTV", "Enforce pause failed", e) }
     }
 
     @Suppress("DEPRECATION")
@@ -106,7 +106,7 @@ object MediaPause {
             Diag.info("Audio", "restored volume=$savedVolume wasMuted=$wasMuted holding=$holding")
             true
         } catch (e: Exception) {
-            android.util.Log.w("StudyOnTV", "Restore media volume failed", e)
+            android.util.Log.w("BabyOnTV", "Restore media volume failed", e)
             Diag.error("Audio", "restore failed", e)
             false
         }
@@ -127,7 +127,7 @@ object MediaPause {
         if (removed) Diag.info("Audio", "release owner, active=false muted=$muted")
         if (restore(context)) muted = false
         try { if (holding) audio(context)?.abandonAudioFocus(listener) }
-        catch (e: Exception) { android.util.Log.w("StudyOnTV", "Release audio focus failed", e) }
+        catch (e: Exception) { android.util.Log.w("BabyOnTV", "Release audio focus failed", e) }
         holding = false
         attempts = 0
     }

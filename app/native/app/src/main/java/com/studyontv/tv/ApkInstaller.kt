@@ -58,7 +58,7 @@ object ApkInstaller {
             onSource(name)
             val file = downloadFrom(ctx, candidate, sha256, onProgress)
             if (file != null) { Prefs.setUpdateLastSource(ctx, name); return file }
-            if (lastError.contains("签名") || lastError.contains("校验")) android.util.Log.w("StudyOnTV", "Rejected update from $name: $lastError")
+            if (lastError.contains("签名") || lastError.contains("校验")) android.util.Log.w("BabyOnTV", "Rejected update from $name: $lastError")
         }
         return null
     }
@@ -72,7 +72,7 @@ object ApkInstaller {
                 connectTimeout = 12000
                 readTimeout = 60000   // 蒲公英 APK 文件大，慢网需要更长时间
                 instanceFollowRedirects = true
-                setRequestProperty("User-Agent", Pgyer.USER_AGENT)
+                setRequestProperty("User-Agent", "Mozilla/5.0 (Linux; Android) BabyOnTV-Updater")
                 setRequestProperty("Accept", "*/*")
             }
             // 手动跟随重定向（部分 HTTP→HTTPS 或 302 跳转 HttpURLConnection 不处理）
@@ -85,7 +85,7 @@ object ApkInstaller {
                 finalConn = URL(loc).openConnection() as HttpURLConnection
                 finalConn.connectTimeout = 12000; finalConn.readTimeout = 60000
                 finalConn.instanceFollowRedirects = true
-                finalConn.setRequestProperty("User-Agent", Pgyer.USER_AGENT)
+                finalConn.setRequestProperty("User-Agent", "Mozilla/5.0 (Linux; Android) BabyOnTV-Updater")
                 redirectCode = finalConn.responseCode
             }
             conn = finalConn

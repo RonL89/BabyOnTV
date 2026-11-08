@@ -109,7 +109,7 @@ object Updater {
         val conn = URL(endpoint).openConnection() as HttpURLConnection
         conn.connectTimeout = 5000
         conn.readTimeout = 6000
-        conn.setRequestProperty("User-Agent", "StudyOnTV-Updater")
+        conn.setRequestProperty("User-Agent", "BabyOnTV-Updater")
         conn.setRequestProperty("Accept", "application/vnd.github+json, application/json")
         return try {
             val code = conn.responseCode
@@ -145,7 +145,7 @@ object Updater {
     /**
      * update.json 格式（由 scripts/make-update-manifest.mjs 生成）：
      * {"version":"0.2.2","notes":"…","force":false,
-     *  "assets":{"tv":{"url":"https://github.com/…/StudyOnTV-TV-v0.2.2.apk","sha256":"…"},"mobile":{…}}}
+     *  "assets":{"tv":{"url":"https://github.com/…/BabyOnTV-TV-v0.2.2.apk","sha256":"…"},"mobile":{…}}}
      */
     private fun parseManifest(manifest: JSONObject, current: String, source: String): Info? {
         val version = manifest.optString("version").removePrefix("v").trim()

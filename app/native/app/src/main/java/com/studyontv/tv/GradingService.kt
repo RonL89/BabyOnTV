@@ -97,7 +97,7 @@ object GradingService {
             connection.connectTimeout = 10000; connection.readTimeout = timeout
             connection.instanceFollowRedirects = false
             connection.setRequestProperty("Content-Type", "application/json")
-            connection.setRequestProperty("User-Agent", "StudyOnTV")
+            connection.setRequestProperty("User-Agent", "BabyOnTV")
             if (key.isNotEmpty()) connection.setRequestProperty("Authorization", "Bearer $key")
             if (body != null) { connection.doOutput = true; connection.outputStream.use { it.write(body.toString().toByteArray(Charsets.UTF_8)) } }
             val code = connection.responseCode

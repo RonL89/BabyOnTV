@@ -1,4 +1,4 @@
-# StudyOnTV — AI / ADB 安装与权限配置指南
+# BabyOnTV — AI / ADB 安装与权限配置指南
 
 面向能执行 ADB 命令的 AI Agent。目标：在**已开启开发者选项、已授权 ADB、允许安装 APK**的 Android 电视 / 盒子 / 手机上，一次完成安装、基础权限和首次启动。
 
@@ -22,7 +22,7 @@
 adb devices
 adb -s "$SERIAL" shell getprop ro.product.model
 adb -s "$SERIAL" shell getprop ro.build.version.sdk
-adb -s "$SERIAL" shell pm list packages | grep studyontv
+adb -s "$SERIAL" shell pm list packages | grep babyontv
 ```
 
 如果设备未授权、未连接、不能安装，停止并让用户处理，不要尝试绕过。

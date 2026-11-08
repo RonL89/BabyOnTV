@@ -3,7 +3,7 @@
 客户端回到学习页时检查最新 Release，**有新版才提示**，结果缓存 6 小时。GitHub 不稳定时会自动换用其他来源（见下文「镜像与备用来源」）。
 
 ```
-GET https://api.github.com/repos/chadyi/StudyOnTV/releases/latest
+GET https://api.github.com/repos/RonL89/BabyOnTV/releases/latest
 ```
 
 | 字段 | 用途 |

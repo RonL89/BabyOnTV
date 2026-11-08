@@ -65,7 +65,7 @@ sensor:
     name: BabyOnTV
     resource: http://192.168.1.20:8099/api/state
     headers:
-      Authorization: !secret studyontv_token
+      Authorization: !secret babyontv_token
     value_template: "{{ value_json.learning.remainingSeconds }}"
     unit_of_measurement: 秒
     json_attributes:
@@ -74,18 +74,18 @@ sensor:
     scan_interval: 60
 
 rest_command:
-  studyontv_unlock:
+  babyontv_unlock:
     url: http://192.168.1.20:8099/api/remote
     method: POST
     headers:
-      Authorization: !secret studyontv_token
+      Authorization: !secret babyontv_token
       Content-Type: application/json
     payload: '{"action":"unlock","minutes":30}'
 ```
 
 ```yaml
 # secrets.yaml
-studyontv_token: "Bearer sotv_xxxxxxxxxxxxxxxx"
+babyontv_token: "Bearer sotv_xxxxxxxxxxxxxxxx"
 ```
 
 > 上面的 `Authorization` 需要写成 `Bearer sotv_...` 的完整值。
@@ -97,14 +97,14 @@ automation:
   - alias: 临时解锁电视 30 分钟
     trigger:
       - platform: state
-        entity_id: input_boolean.studyontv_unlock
+        entity_id: input_boolean.babyontv_unlock
         to: "on"
     action:
-      - service: rest_command.studyontv_unlock
+      - service: rest_command.babyontv_unlock
       - delay: "00:00:05"
       - service: input_boolean.turn_off
         target:
-          entity_id: input_boolean.studyontv_unlock
+          entity_id: input_boolean.babyontv_unlock
 ```
 
 ## 限制与安全

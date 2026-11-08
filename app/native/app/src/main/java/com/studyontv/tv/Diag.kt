@@ -30,7 +30,7 @@ object Diag {
             rotate(context)
             val line = "${format.format(Date())} $level/$tag ${Thread.currentThread().name}: $message\n"
             File(dir(context), FILE).appendText(line)
-            android.util.Log.println(if (level == "E") android.util.Log.ERROR else android.util.Log.INFO, "StudyOnTV-$tag", message)
+            android.util.Log.println(if (level == "E") android.util.Log.ERROR else android.util.Log.INFO, "BabyOnTV-$tag", message)
         } catch (_: Throwable) { }
     }
 
@@ -73,7 +73,7 @@ object Diag {
                 zip.putNextEntry(ZipEntry("logs/${file.name}")); zip.write(file.readBytes()); zip.closeEntry()
             }
             val device = JSONObject()
-                .put("app", "StudyOnTV").put("version", BuildConfig.VERSION_NAME).put("versionCode", BuildConfig.VERSION_CODE)
+                .put("app", "BabyOnTV").put("version", BuildConfig.VERSION_NAME).put("versionCode", BuildConfig.VERSION_CODE)
                 .put("flavor", BuildConfig.FLAVOR).put("package", context.packageName)
                 .put("model", Build.MODEL).put("manufacturer", Build.MANUFACTURER)
                 .put("android", Build.VERSION.RELEASE).put("sdk", Build.VERSION.SDK_INT)

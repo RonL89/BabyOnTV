@@ -32,10 +32,19 @@ object AudioPlayer {
         val mp = MediaPlayer()
         try {
             try {
-                mp.setAudioAttributes(AudioAttributes.Builder()
-                    .setLegacyStreamType(AudioManager.STREAM_SYSTEM)
-                    .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
-                    .build())
+                // 电视走 STREAM_SYSTEM，避开 MediaPause 对音乐流的静音（VIDAA 视频播放器不理会暂停键）；
+                // 手机/平板走 STREAM_MUSIC，音量正常（系统流在手机上听不到）。
+                if (BuildConfig.FLAVOR == "tv") {
+                    mp.setAudioAttributes(AudioAttributes.Builder()
+                        .setLegacyStreamType(AudioManager.STREAM_SYSTEM)
+                        .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
+                        .build())
+                } else {
+                    mp.setAudioAttributes(AudioAttributes.Builder()
+                        .setUsage(AudioAttributes.USAGE_MEDIA)
+                        .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
+                        .build())
+                }
             } catch (_: Throwable) { }
             val afd = try {
                 context.assets.openFd("audio/$filename")

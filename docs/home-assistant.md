@@ -35,7 +35,7 @@ Home Assistant（下称 HA）管的是**设备层**：电视在哪个信号源�
 
 ```yaml
 # secrets.yaml
-studyontv_admin_key: "你的管理密码"
+babyontv_admin_key: "你的管理密码"
 ```
 
 然后加一个 REST 传感器：
@@ -44,11 +44,11 @@ studyontv_admin_key: "你的管理密码"
 # configuration.yaml
 sensor:
   - platform: rest
-    name: StudyOnTV Remaining
-    unique_id: studyontv_remaining
+    name: BabyOnTV Remaining
+    unique_id: babyontv_remaining
     resource: http://<电视IP>:8099/api/state
     headers:
-      X-Admin-Key: !secret studyontv_admin_key
+      X-Admin-Key: !secret babyontv_admin_key
     value_template: "{{ (value_json.learning.remainingSeconds / 60) | round(0) }}"
     unit_of_measurement: min
     scan_interval: 120
@@ -59,7 +59,7 @@ sensor:
 
 用起来是这样：
 
-- `sensor.studyontv_remaining`：还能看几分钟（本次答题解锁的剩余时长）；
+- `sensor.babyontv_remaining`：还能看几分钟（本次答题解锁的剩余时长）；
 - `attributes.learning.reason`：为什么锁着，取值 `quota`（当天配额用完）、`rounds`（答题组数用完）、`schedule`（不在可用时段）、`timeup`（剩余时长用完），空字符串表示可以看；
 - `attributes.learning.nextAvailableAt`：下次可用的时间戳（毫秒，`0` 表示没有）；
 - `attributes.today.usedMinutes` / `answered` / `correct` / `accuracy`：今天的观看与答题统计。
@@ -69,11 +69,11 @@ sensor:
 ```yaml
 template:
   - sensor:
-      - name: StudyOnTV Status
-        unique_id: studyontv_status
+      - name: BabyOnTV Status
+        unique_id: babyontv_status
         state: >-
-          {% set reason = state_attr('sensor.studyontv_remaining', 'learning').reason
-                           if state_attr('sensor.studyontv_remaining', 'learning') else '' %}
+          {% set reason = state_attr('sensor.babyontv_remaining', 'learning').reason
+                           if state_attr('sensor.babyontv_remaining', 'learning') else '' %}
           {{ {'quota': '今日配额已用完',
               'rounds': '今日答题组数已用完',
               'schedule': '不在可用时段',
@@ -97,7 +97,7 @@ template:
 
 ```yaml
 input_boolean:
-  studyontv_window:
+  babyontv_window:
 ```
 
 ```yaml
@@ -108,7 +108,7 @@ automation:
         at: "17:00:00"
     action:
       - service: input_boolean.turn_on
-        target: { entity_id: input_boolean.studyontv_window }
+        target: { entity_id: input_boolean.babyontv_window }
 
   - alias: "[电视] 作业时段结束，收回设备层"
     trigger:
@@ -116,7 +116,7 @@ automation:
         at: "21:00:00"
     action:
       - service: input_boolean.turn_off
-        target: { entity_id: input_boolean.studyontv_window }
+        target: { entity_id: input_boolean.babyontv_window }
 ```
 
 然后给 HA 自己的「每日配额 / 定时锁」自动化加一条条件：
@@ -124,7 +124,7 @@ automation:
 ```yaml
 condition:
   - condition: state
-    entity_id: input_boolean.studyontv_window
+    entity_id: input_boolean.babyontv_window
     state: "off"
 ```
 

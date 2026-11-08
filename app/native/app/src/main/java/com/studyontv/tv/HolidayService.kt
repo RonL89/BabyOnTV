@@ -101,7 +101,7 @@ object HolidayService {
         val connection = (URL(url).openConnection() as HttpURLConnection).apply {
             connectTimeout = 4000
             readTimeout = 5000
-            setRequestProperty("User-Agent", "StudyOnTV")
+            setRequestProperty("User-Agent", "BabyOnTV")
             setRequestProperty("Accept", "application/json")
         }
         try {

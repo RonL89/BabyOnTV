@@ -144,7 +144,7 @@ class LanServer(
         when {
             path == "/api/hello" && method == "GET" -> {
                 val info = JSONObject()
-                    .put("app", "StudyOnTV")
+                    .put("app", "BabyOnTV")
                     .put("version", BuildConfig.VERSION_NAME)
                     .put("name", Prefs.deviceName(context))
                     .put("ip", localIp() ?: "")
@@ -285,17 +285,11 @@ class LanServer(
             path == "/api/logs" && method == "DELETE" -> { Diag.clear(context); return json(out, 200, JSONObject().put("ok", true)) }
             path == "/api/logs/export" && method == "GET" -> {
                 val stamp = java.text.SimpleDateFormat("yyyyMMdd-HHmm", java.util.Locale.US).format(java.util.Date())
-                return reply(out, 200, "application/zip", Diag.export(context), mapOf("Content-Disposition" to "attachment; filename=\"studyontv-logs-$stamp.zip\""))
+                return reply(out, 200, "application/zip", Diag.export(context), mapOf("Content-Disposition" to "attachment; filename=\"babyontv-logs-$stamp.zip\""))
             }
             path == "/api/device" && method == "GET" -> return json(out, 200, JSONObject().put("name", Prefs.deviceName(context))
                 .put("version", BuildConfig.VERSION_NAME).put("flavor", BuildConfig.FLAVOR).put("ip", localIp() ?: "").put("port", boundPort)
-                .put("uninstallProtected", UninstallGuard.active(context)).put("autostart", Watchdog.report(context)).put("monitor", GateService.diagnostics(context))
-                .put("buglyConsent", Prefs.buglyConsent(context)))
-            path == "/api/device/bugly" && method == "PUT" -> {
-                val enabled = JSONObject(body).optBoolean("enabled")
-                Prefs.setBuglyConsent(context, enabled)   // 已移除 Bugly SDK，仅保留开关状态供面板显示，不上传
-                return json(out, 200, JSONObject().put("ok", true).put("buglyConsent", Prefs.buglyConsent(context)))
-            }
+                .put("uninstallProtected", UninstallGuard.active(context)).put("autostart", Watchdog.report(context)).put("monitor", GateService.diagnostics(context)))
             path == "/api/device/uninstall-guard" && method == "DELETE" -> {
                 // 家长在网页端可以关闭防卸载（安全：需要家长登录 token）
                 return try {
