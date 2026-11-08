@@ -1,0 +1,168 @@
+name: Build BabyOnTV APK
+
+on:
+  push:
+    branches: ["main", "master"]
+    paths-ignore:
+      - "**/*.md"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: babyontv-build-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Assemble BabyOnTV APK
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      # 直接使用 runner 预装的 Android SDK，避免第三方 setup 动作在 Node24 下失效
+      - name: Install Android SDK packages
+        run: |
+          set -e
+          SDKMANAGER="${ANDROID_HOME:-$ANDROID_SDK_ROOT}/cmdline-tools/latest/bin/sdkmanager"
+          if [ ! -x "$SDKMANAGER" ]; then SDKMANAGER="$(command -v sdkmanager)"; fi
+          yes | "$SDKMANAGER" --licenses > /dev/null 2>&1 || true
+          "$SDKMANAGER" --install "platforms;android-36" "build-tools;36.0.0" "platform-tools"
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.14.3"
+
+      # 题库与离线语音必须一一对应：题干 q_<i>.mp3 + 每个选项 q_<i>_opt_<j>.mp3 + 2 个反馈音
+      - name: Verify offline audio package
+        run: |
+          python3 - <<'PY'
+          import json, os, sys
+          data = json.load(open("data/seed.json", encoding="utf-8"))
+          missing = []
+          for i, q in enumerate(data):
+              qid = q.get("id") or ""
+              if qid != "q_%d" % i:
+                  missing.append("bad id %r at %d" % (qid, i))
+              if not os.path.exists("data/audio/%s.mp3" % qid):
+                  missing.append("%s.mp3" % qid)
+              for j in range(len(q["a"])):
+                  f = "%s_opt_%d.mp3" % (qid, j)
+                  if not os.path.exists("data/audio/" + f):
+                      missing.append(f)
+          for f in ("sfx_correct.mp3", "sfx_wrong.mp3"):
+              if not os.path.exists("data/audio/" + f):
+                  missing.append(f)
+          total = len([f for f in os.listdir("data/audio") if f.endswith(".mp3")])
+          print("题库 %d 题，音频文件 %d 个" % (len(data), total))
+          if missing:
+              print("缺失音频/ID，例如：", missing[:10], "共", len(missing))
+              sys.exit(1)
+          PY
+
+      # 版本自动化：versionName=1.0.<run>，versionCode=10000+run
+      - name: Compute version
+        id: ver
+        run: |
+          if [ "${GITHUB_REF_TYPE}" = "tag" ]; then
+            VERSION="${GITHUB_REF_NAME#v}"
+          else
+            VERSION="1.0.${GITHUB_RUN_NUMBER}"
+          fi
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "BABYONTV_VERSION=$VERSION" >> "$GITHUB_ENV"
+          echo "BABYONTV_VERSION_NAME=$VERSION" >> "$GITHUB_ENV"
+          echo "BABYONTV_VERSION_CODE=$((10000 + GITHUB_RUN_NUMBER))" >> "$GITHUB_ENV"
+
+      # 有 keystore secret 才出 release 签名包，否则回退 debug，保证流水线永不中断
+      - name: Prepare signing key
+        id: keystore
+        env:
+          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+        run: |
+          if [ -z "$KEYSTORE_BASE64" ]; then
+            echo "signed=false" >> "$GITHUB_OUTPUT"
+            echo "::warning::未配置 KEYSTORE_BASE64，本次构建 debug 包"
+          else
+            mkdir -p "$GITHUB_WORKSPACE/keystore"
+            printf '%s' "$KEYSTORE_BASE64" | base64 -d > "$GITHUB_WORKSPACE/keystore/release.p12"
+            test -s "$GITHUB_WORKSPACE/keystore/release.p12"
+            {
+              echo "KEYSTORE_PATH=$GITHUB_WORKSPACE/keystore/release.p12"
+              echo "KEYSTORE_PASS=${{ secrets.KEYSTORE_PASS }}"
+              echo "KEY_ALIAS=${{ secrets.KEY_ALIAS }}"
+              echo "KEY_PASS=${{ secrets.KEY_PASS }}"
+            } > app/native/local.properties
+            echo "signed=true" >> "$GITHUB_OUTPUT"
+            echo "已载入 release 签名密钥"
+          fi
+
+      - name: Assemble release (signed)
+        if: steps.keystore.outputs.signed == 'true'
+        working-directory: app/native
+        run: gradle :app:assembleTvRelease :app:assembleMobileRelease --no-daemon --stacktrace
+
+      - name: Assemble debug (fallback)
+        if: steps.keystore.outputs.signed != 'true'
+        working-directory: app/native
+        run: gradle :app:assembleTvDebug :app:assembleMobileDebug --no-daemon --stacktrace
+
+      - name: Rename APKs
+        env:
+          VERSION: ${{ steps.ver.outputs.version }}
+        run: |
+          mkdir -p dist
+          if [ "${{ steps.keystore.outputs.signed }}" = "true" ]; then
+            TV=app/native/app/build/outputs/apk/tv/release/app-tv-release.apk
+            MOBILE=app/native/app/build/outputs/apk/mobile/release/app-mobile-release.apk
+          else
+            TV=app/native/app/build/outputs/apk/tv/debug/app-tv-debug.apk
+            MOBILE=app/native/app/build/outputs/apk/mobile/debug/app-mobile-debug.apk
+          fi
+          cp "$TV" "dist/BabyOnTV-TV-v${VERSION}.apk"
+          cp "$MOBILE" "dist/BabyOnTV-Mobile-v${VERSION}.apk"
+          cd dist && sha256sum *.apk > SHA256SUMS.txt && cat SHA256SUMS.txt
+
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: BabyOnTV-apks
+          path: dist/*
+          if-no-files-found: error
+          retention-days: 90
+
+      # 打 tag 并发布到 GitHub Releases，Updater 按 -TV- / -Mobile- 识别资产
+      - name: Publish GitHub Release
+        if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ steps.ver.outputs.version }}
+          name: BabyOnTV v${{ steps.ver.outputs.version }}
+          body: |
+            BabyOnTV 幼儿识字 / 英语 / 书写启蒙（离线语音，基于 StudyOnTV）
+
+            - 题库：识字 100 + 英语 100 + 书写 10，共 210 题
+            - 语音：832 个离线 mp3，题干/选项/对错音效全部本地播放，不依赖系统 TTS
+            - 管控：沿用上游 StudyOnTV 的答题解锁、时段、加练、间隔复习与家长面板
+            - 包名：电视 `com.babyontv.tv`，手机/平板 `com.babyontv.mobile`
+            - 签名：${{ steps.keystore.outputs.signed == 'true' && 'release keystore' || 'debug（未配置密钥）' }}
+
+            下载：
+            - 电视：`BabyOnTV-TV-v${{ steps.ver.outputs.version }}.apk`
+            - 手机/平板：`BabyOnTV-Mobile-v${{ steps.ver.outputs.version }}.apk`
+
+            SHA256 见 `SHA256SUMS.txt`。
+          files: dist/*
+          fail_on_unmatched_files: true
+          generate_release_notes: false

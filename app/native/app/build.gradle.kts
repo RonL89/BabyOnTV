@@ -15,22 +15,23 @@ android {
     compileSdk = 36
 
     defaultConfig {
-        applicationId = "com.studyontv.tv"
+        applicationId = "com.babyontv.tv"
         minSdk = 21          // Android 5.0
         targetSdk = 34
-        versionCode = 26
-        versionName = "0.3.21"
+        // CI 注入 1.0.<run> / 10000+run；本地缺省沿用上游版本
+        versionCode = (System.getenv("BABYONTV_VERSION_CODE") ?: "26").toInt()
+        versionName = System.getenv("BABYONTV_VERSION_NAME") ?: "0.3.21"
     }
 
     flavorDimensions += "device"
     productFlavors {
         create("tv") {
             dimension = "device"
-            applicationId = "com.studyontv.tv"
+            applicationId = "com.babyontv.tv"
         }
         create("mobile") {
             dimension = "device"
-            applicationId = "com.studyontv.mobile"
+            applicationId = "com.babyontv.mobile"
         }
     }
 
@@ -74,6 +75,11 @@ android {
     buildFeatures {
         buildConfig = true
     }
+
+    // 离线语音：mp3 不压缩，AudioPlayer 用 assets.openFd 直读
+    androidResources {
+        noCompress += listOf("mp3")
+    }
 }
 
 dependencies {
@@ -87,6 +93,7 @@ val syncWebAssets by tasks.registering(Sync::class) {
     from(File(repoRoot, "app/web")) { into("web") }
     from(File(repoRoot, "admin")) { into("admin") }
     from(File(repoRoot, "data/seed.json")) { rename { "questions.json" } }
+    from(File(repoRoot, "data/audio")) { into("audio") }
     from(File(repoRoot, "shared/katex")) { into("web/assets/vendor/katex") }
     from(File(repoRoot, "shared/math.js")) { into("web/assets/js") }
     from(File(repoRoot, "data/holidays")) { into("holidays") }

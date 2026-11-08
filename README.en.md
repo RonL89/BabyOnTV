@@ -1,10 +1,13 @@
-# StudyOnTV
+# BabyOnTV
 
-An Android learning and screen-time app for tablets, phones and TVs. Tablets and phones use the Mobile APK; TVs use a separate lightweight TV APK. Both keep question banks, progress and usage records locally.
+BabyOnTV is a fork of [StudyOnTV](https://github.com/chadyi/StudyOnTV) for 3–6 year olds:
+the screen-time / unlock logic is kept exactly as upstream, while the built-in question bank
+(210 questions) and the offline mp3 narration are replaced. Packages: `com.babyontv.tv` (TV)
+and `com.babyontv.mobile` (phone / tablet).
 
 This project is linked with and endorses the [LINUX DO](https://linux.do) community.
 
-[Download from GitHub Release](https://github.com/chadyi/StudyOnTV/releases/latest) · [中文说明](./README.md) · [Installation](./docs/install.md)
+[Download from GitHub Release](https://github.com/RonL89/BabyOnTV/releases/latest) · [中文说明](./README.md) · [Installation](./docs/install.md)
 
 If GitHub is unavailable, use the Pgyer backup: [Mobile / tablet](https://www.pgyer.com/StudyOnTVMobile) · [TV](https://www.pgyer.com/StudyOnTVTV).
 

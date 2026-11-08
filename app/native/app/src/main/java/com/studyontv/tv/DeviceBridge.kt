@@ -38,7 +38,7 @@ open class DeviceBridge(protected val activity: Activity, private val connection
         if (!connectionAllowed) return false
         return try {
             val manager = activity.getSystemService(Context.CLIPBOARD_SERVICE) as? android.content.ClipboardManager ?: return false
-            manager.setPrimaryClip(android.content.ClipData.newPlainText("题了个题", value))
+            manager.setPrimaryClip(android.content.ClipData.newPlainText("BabyOnTV", value))
             true
         } catch (e: Exception) {
             Diag.warn("UI", "copyText failed: ${e.message}")
@@ -133,6 +133,17 @@ open class DeviceBridge(protected val activity: Activity, private val connection
     }
 
     private var tts: TextToSpeech? = null
+
+    /** BabyOnTV：播放 data/audio 预生成的离线语音（题干 / 选项 / 对错音效） */
+    @JavascriptInterface
+    fun playAudio(filename: String) {
+        activity.runOnUiThread { AudioPlayer.play(activity, filename) }
+    }
+
+    @JavascriptInterface
+    fun stopAudio() {
+        activity.runOnUiThread { AudioPlayer.stop() }
+    }
 
     @JavascriptInterface
     fun readAloud(text: String) {

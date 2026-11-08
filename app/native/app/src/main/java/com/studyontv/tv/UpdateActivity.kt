@@ -49,7 +49,7 @@ class UpdateActivity : Activity() {
             gravity = Gravity.CENTER_HORIZONTAL
             setPadding(dp(if (tv) 32 else 20), dp(if (tv) 44 else 28), dp(if (tv) 32 else 20), dp(30))
         }
-        content.addView(TvUi.text(this, if (tv) "题了个题 · TV" else "题了个题", 14f, palette.text3))
+        content.addView(TvUi.text(this, if (tv) "BabyOnTV · TV" else "BabyOnTV", 14f, palette.text3))
         content.addView(TvUi.text(this, "发现新版本", 15f, palette.text2).apply {
             setPadding(0, dp(18), 0, 0)
         })

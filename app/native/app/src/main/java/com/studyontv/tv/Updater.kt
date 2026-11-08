@@ -8,11 +8,11 @@ import java.net.HttpURLConnection
 import java.net.URL
 
 /**
- * 版本检查：只使用蒲公英应用内更新接口（appKey + 当前版本）。
- * 不再访问 GitHub 或第三方镜像；蒲公英失败时由更新页引导用户手动下载。
+ * 版本检查：BabyOnTV 改为只查我们自己的 GitHub Release。
+ * 不再访问上游蒲公英接口，避免把本应用更新成上游“BabyOnTV”安装包。
  */
 object Updater {
-    const val OWNER_REPO = "chadyi/StudyOnTV"
+    const val OWNER_REPO = "RonL89/BabyOnTV"
     private const val GITHUB_API = "https://api.github.com/repos/$OWNER_REPO/releases/latest"
     private const val MANIFEST_PATH = "$OWNER_REPO/main/update.json"
     private val MANIFEST_URLS = listOf(
@@ -43,9 +43,9 @@ object Updater {
             .map { if (it.endsWith("/")) it else "$it/" }.distinct()
     }
 
-    /** 可用的 APK 下载地址：上次成功的线路优先，其次直连，再其次各个镜像 */
+    /** 可用的 APK 下载地址：GitHub Release 直链 */
     fun downloadCandidates(ctx: Context, url: String): List<Pair<String, String>> =
-        listOf("蒲公英" to url)
+        listOf("GitHub Release" to url)
 
     fun check(ctx: Context, forceRefresh: Boolean = false, onResult: (Info?) -> Unit) {
         val cachedAt = Prefs.updateCheckedAt(ctx)
@@ -74,12 +74,13 @@ object Updater {
         val started = System.currentTimeMillis()
         var info: Info? = null
         try {
-            info = Pgyer.info(ctx, current, currentVersionCode(ctx))
-            log.put(JSONObject().put("source", "蒲公英").put("ok", info != null).put("ms", System.currentTimeMillis() - started)
+            val release = fetch(GITHUB_API)
+            info = release?.let { parse(it, current, "GitHub") }
+            log.put(JSONObject().put("source", "GitHub Release").put("ok", info != null).put("ms", System.currentTimeMillis() - started)
                 .put("message", if (info == null) "当前已是最新版本" else "v" + info.latest))
         } catch (e: Exception) {
-            Diag.error("Update", "Pgyer check failed", e)
-            log.put(JSONObject().put("source", "蒲公英").put("ok", false).put("ms", System.currentTimeMillis() - started)
+            Diag.error("Update", "GitHub check failed", e)
+            log.put(JSONObject().put("source", "GitHub Release").put("ok", false).put("ms", System.currentTimeMillis() - started)
                 .put("message", e.message?.take(160) ?: e.javaClass.simpleName))
         }
         Prefs.setUpdateInfo(ctx, info?.let { toJson(it).toString() } ?: "")
@@ -133,7 +134,7 @@ object Updater {
         val assets = release.optJSONArray("assets")
         val candidates = (0 until (assets?.length() ?: 0)).map { assets!!.getJSONObject(it) }
         val selected = candidates.firstOrNull { it.optString("name").contains(flavorMarker, true) && it.optString("name").endsWith(".apk", true) }
-            ?: if (BuildConfig.FLAVOR == "tv") candidates.firstOrNull { it.optString("name").matches(Regex("StudyOnTV-v[0-9.]+\\.apk")) } else null
+            ?: if (BuildConfig.FLAVOR == "tv") candidates.firstOrNull { it.optString("name").matches(Regex("BabyOnTV-v[0-9.]+\\.apk")) } else null
         val url = selected?.optString("browser_download_url")?.takeIf { it.isNotEmpty() } ?: return null
         // GitHub 会给 Release 附件计算 digest（sha256:...），用于校验镜像下载的文件
         val digest = selected.optString("digest").takeIf { it.startsWith("sha256:", true) }?.substring(7).orEmpty()

@@ -99,9 +99,19 @@
       show('quiz'); renderQuestion();
     });
   }
+  // BabyOnTV：离线语音（data/audio 预生成 mp3）。有音频时优先播 mp3，没有才回退系统 TTS。
+  function btvAudio(name) { if (!name) return; try { nativeCall('playAudio', [name]); } catch (e) {} }
+  function btvQid(item) { var id = item && item.id ? String(item.id) : ''; return /^q_\d+$/.test(id) ? id : ''; }
+  function btvOptionAudio() {
+    var el = document.querySelector('.screen.active .focused');
+    if (!el || !state.round || !state.round.question) return;
+    var idx = el.getAttribute('data-opt');
+    if (idx === null) return;
+    var qid = btvQid(state.round.question);
+    if (qid) btvAudio(qid + '_opt_' + idx + '.mp3');
+  }
   function renderQuestion() {
-    var round = state.round, item = round.question;
-    if (window._pendingInput) { state.draft = { nonce: round.nonce, text: window._pendingInput.text || '', drawing: window._pendingInput.drawing || '' }; window._pendingInput = null; }
+    var round = state.round, item = round.question;    if (window._pendingInput) { state.draft = { nonce: round.nonce, text: window._pendingInput.text || '', drawing: window._pendingInput.drawing || '' }; window._pendingInput = null; }
     else if (!state.draft || state.draft.nonce !== round.nonce) state.draft = { nonce: round.nonce, text: '', drawing: '' };
     state.selected = [];
     $('qText').textContent = item.q;
@@ -112,7 +122,9 @@
     $('qDots').textContent = round.mode === 'streak' ? '连续答对 ' + round.streak + ' 题' : '';
     var qLength = (item.q || '').length;
     $('qText').className = 'question' + (qLength > 120 ? ' longer' : qLength > 56 ? ' long' : '');
-    try { if (isTv() && window.localStorage.getItem('sotv_tts') === '1') { nativeCall('readAloud', [item.q]); } } catch (e) {}
+    var btvId = btvQid(item);
+    if (btvId) btvAudio(btvId + '.mp3');
+    else try { if (isTv() && window.localStorage.getItem('sotv_tts') === '1') { nativeCall('readAloud', [item.q]); } } catch (e) {}
     var options = $('qOptions'); options.innerHTML = '';
     var longest = 0;
     (item.a || []).forEach(function (value) { longest = Math.max(longest, String(value).length); });
@@ -205,6 +217,7 @@
       else answer = (result.correctIndices || []).map(function (i) { return String.fromCharCode(65 + i) + '. ' + (item.a || [])[i]; }).join('　');
     }
     box.className = 'feedback show ' + (right ? 'is-right' : 'is-wrong');
+    btvAudio(right ? 'sfx_correct.mp3' : 'sfx_wrong.mp3');
     $('fbIcon').textContent = right ? '✓' : '!';
     $('fbTitle').textContent = title;
     $('fbAnswer').textContent = answer ? '正确答案：' + answer : '';
@@ -259,6 +272,7 @@
   }
   function lock(reason) {
     state.lockReason = reason;
+    try { nativeCall('stopAudio'); } catch (e) {}
     show('lock'); state.round = null;
     if (reason === 'settings') {
       icon($('lockIcon'), 'hourglass');
@@ -290,6 +304,7 @@
     focusDefault();
   }
   function pair() {
+    try { nativeCall('stopAudio'); } catch (e) {}
     var raw = nativeCall('lanInfo'), info;
     try { info = JSON.parse(raw); } catch (e) {}
     if (!info) { nativeCall('openParent'); return; }
@@ -353,7 +368,7 @@
       var secondary = dir === 'left' || dir === 'right' ? Math.abs(dy) : Math.abs(dx);
       if (primary > 8 && primary + secondary * 1.8 < score) { score = primary + secondary * 1.8; best = i; }
     });
-    if (best >= 0) { setFocus(best); return true; }
+    if (best >= 0) { setFocus(best); if (dir === 'left' || dir === 'right') btvOptionAudio(); return true; }
     return false;
   }
   function activate(el) {

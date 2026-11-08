@@ -11,8 +11,8 @@
 | 参数 | 示例 | 说明 |
 |---|---|---|
 | `SERIAL` | `192.168.1.20:5555` 或 `emulator-5554` | `adb devices` 中的设备 |
-| `APK` | `StudyOnTV-Android-TV-v0.3.10.apk` | 官方签名 APK |
-| `PKG` | `com.studyontv.tv` | TV 正式包；手机/平板为 `com.studyontv.mobile` |
+| `APK` | `BabyOnTV-TV-v0.3.10.apk` | 官方签名 APK |
+| `PKG` | `com.babyontv.tv` | TV 正式包；手机/平板为 `com.babyontv.mobile` |
 
 调试包包名末尾是 `.debug`，但无障碍服务类名不变。
 
@@ -45,8 +45,8 @@ adb -s "$SERIAL" install -r "$APK"
 set -u
 
 SERIAL="192.168.1.20:5555"
-APK="StudyOnTV-Android-TV-v0.3.10.apk"
-PKG="com.studyontv.tv"
+APK="BabyOnTV-TV-v0.3.10.apk"
+PKG="com.babyontv.tv"
 
 adb -s "$SERIAL" wait-for-device
 adb -s "$SERIAL" install -r "$APK"
@@ -195,8 +195,8 @@ adb -s "$SERIAL" shell am start -a android.settings.IGNORE_BATTERY_OPTIMIZATION_
 
 ## 9. 支持范围
 
-- TV 正式包：`com.studyontv.tv`
-- 手机 / 平板正式包：`com.studyontv.mobile`
+- TV 正式包：`com.babyontv.tv`
+- 手机 / 平板正式包：`com.babyontv.mobile`
 - 最低 Android 5.0（API 21）
 - 无障碍类：`com.studyontv.tv.WatchAccessibilityService`
 - 主 Activity：`com.studyontv.tv.MainActivity`

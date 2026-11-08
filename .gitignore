@@ -20,10 +20,18 @@ node_modules/
 /app/native/app/src/main/assets/web/
 /app/native/app/src/main/assets/admin/
 /app/native/app/src/main/assets/questions.json
+/app/native/app/src/main/assets/audio/
 StudyOnTV-*.apk
+BabyOnTV-*.apk
 *.idsig
 *.jks
+*.p12
 studyontv-release.jks
+
+# 签名密钥 / 本地发布产物 / 诊断报告（绝不入库）
+/keystore/
+/dist/
+/reports/
 
 /app/server/
 
