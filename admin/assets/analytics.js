@@ -13,7 +13,7 @@
   var CONFIG = {
     ga4Id: 'G-561826488',        
     clarityId: 'z7790sezw1',      
-    enabled: true,
+    enabled: false,
     debug: false                  
   };
 
