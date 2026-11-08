@@ -445,7 +445,6 @@
     });
     var info = nativeCall('deviceInfo');
     if (info && JSON.parse(info).platform === 'android-tv') document.documentElement.classList.add('tv-device');
-    else if (info) { var analytics = document.createElement('script'); analytics.src = 'assets/js/analytics.js'; analytics.async = true; document.head.appendChild(analytics); }
     // 先用上次的主题，避免加载配置前闪一下默认配色
     try { applyTheme(window.localStorage.getItem('sotv_mode')); } catch (e) { applyTheme('dark'); }
     // 启动时显示已缓存的更新信息（原生层在页面加载前拿到结果时，回调会丢失）

@@ -17,6 +17,8 @@ object MediaPause {
     private var originalVolume = 0
     private var originalMuted = false
     val active: Boolean get() = owners.isNotEmpty()
+    /** 音乐流当前是否被本模块静音（用于语音播放诊断与协作） */
+    fun isMuted(): Boolean = muted
 
     private fun audio(context: Context) = context.getSystemService(Context.AUDIO_SERVICE) as? AudioManager
     private fun prefs(context: Context) = context.getSharedPreferences("sotv", Context.MODE_PRIVATE)
@@ -55,6 +57,7 @@ object MediaPause {
 
     fun enforce(context: Context) {
         if (!active) return
+        if (AudioPlayer.speaking) return   // 朗读期间不静音，避免压掉答题语音
         val audio = audio(context) ?: return
         try {
             if (!audio.isMusicActive) return

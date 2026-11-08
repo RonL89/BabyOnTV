@@ -8,11 +8,10 @@ import java.io.File
  *
  * 在进程启动时安装 UncaughtExceptionHandler：
  *   1. 把崩溃摘要（类名 + 消息）写入 filesDir/crash_pending 标记文件
- *   2. 调用原有 handler（让系统/Bugly 继续处理）
+ *   2. 同时写入本地 Diag 日志（不上传任何第三方）
  *
- * 下次启动时 MainActivity 读取该文件，存在则弹窗询问用户是否提交。
- * 用户确认 → BuglyInit.initWithConsent()，同时删除标记。
- * 用户拒绝 → 只删标记，不上传。
+ * 下次启动时 MainActivity 读取该标记并清空，崩溃详情只保存在本地日志里，
+ * 家长可通过面板「导出诊断」或 adb logcat 查看。
  */
 object CrashDetector {
     private const val PENDING_FILE = "crash_pending"

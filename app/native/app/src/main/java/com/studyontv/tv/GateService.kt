@@ -73,6 +73,7 @@ class GateService : Service() {
         val active = awake && monitoring && when {
             pkg == null -> canOverlay
             !exempt(pkg) -> true
+            countLauncherAsUsage() && pkg == launcherPackage() -> true
             else -> launcherPlaying(pkg)
         }
         val protecting = awake && monitoring && if (pkg == null) canOverlay else !exempt(pkg, false)
@@ -169,7 +170,6 @@ class GateService : Service() {
         if (!p.getBoolean("overlay_was_granted", false)) return
         p.edit().putBoolean("overlay_was_granted", false).apply()
         Diag.warn("Gate", "overlay permission was revoked by system")
-        BuglyInit.reportPermissionLost("SYSTEM_ALERT_WINDOW", "revoked by system firmware")
         try {
             val manager = getSystemService(NOTIFICATION_SERVICE) as NotificationManager
             val channelId = "sotv_gate_alert"
@@ -206,7 +206,6 @@ class GateService : Service() {
                 .setSmallIcon(android.R.drawable.ic_lock_idle_alarm)
                 .setContentIntent(pi).setAutoCancel(true).setOnlyAlertOnce(false).build())
             Diag.warn("Gate", "accessibility lost after restart, notified parent")
-            BuglyInit.reportPermissionLost("ACCESSIBILITY_SERVICE", "removed by system after process kill")
         } catch (e: Exception) { Diag.error("Gate", "cannot notify accessibility lost", e) }
     }
 
@@ -255,6 +254,10 @@ class GateService : Service() {
         if (Foreground.isLauncher(pkg)) return false
         return Playback.hasActive(this)
     }
+
+    /** 海信 VIDAA 等机型：厂商桌面即视频门户，前台常驻桌面包时按配置直接算作用中，不依赖不可靠的播放检测 */
+    private fun countLauncherAsUsage(): Boolean =
+        DeviceRuntime.store.config().optBoolean("countLauncherAsUsage", false)
 
     private fun isSettings(pkg: String): Boolean = pkg == systemSettingsPackage ||
         pkg in setOf("com.android.settings", "com.android.tv.settings", "com.google.android.tv.settings")

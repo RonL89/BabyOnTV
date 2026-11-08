@@ -36,28 +36,8 @@ open class MainActivity : Activity() {
     /** 每次回到学习页都检查一次（6 小时内用缓存，不会频繁联网）；电视上 Activity 很少重建，只在 onCreate 检查会漏掉 */
     private fun checkCrashReport() {
         if (!CrashDetector.hasPending(this)) return
-        // 已经同意过的直接初始化并清标记，不再重复弹窗
-        if (Prefs.buglyConsent(this)) {
-            CrashDetector.clear(this)
-            BuglyInit.init(this)
-            return
-        }
-        val summary = CrashDetector.readAndClear(this)
-        AlertDialog.Builder(this)
-            .setTitle("🚨 上次运行时发生了崩溃")
-            .setMessage(
-                "是否允许上传崩溃日志帮助修复问题？\n\n" +
-                "包含：崩溃调用堆栈、设备型号、Android 版本、应用版本号\n" +
-                "不含：题库内容、管理密码、答题记录、局域网 IP\n\n" +
-                "日志将上传至腾讯 Bugly 服务器，可随时在「设置 → 崩溃报告」关闭。"
-            )
-            .setPositiveButton("提交日志") { _, _ ->
-                BuglyInit.initWithConsent(this)
-                android.widget.Toast.makeText(this, "已提交，感谢反馈！", android.widget.Toast.LENGTH_SHORT).show()
-            }
-            .setNegativeButton("不了") { _, _ -> /* 标记已在 readAndClear 里删除 */ }
-            .setCancelable(false)
-            .show()
+        // 崩溃已由 Diag.installCrashHandler / CrashDetector 写入本地日志；这里只清标记，不上传任何第三方
+        CrashDetector.clear(this)
     }
 
     private fun checkUpdate() {

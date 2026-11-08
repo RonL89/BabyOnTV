@@ -293,7 +293,7 @@ class LanServer(
                 .put("buglyConsent", Prefs.buglyConsent(context)))
             path == "/api/device/bugly" && method == "PUT" -> {
                 val enabled = JSONObject(body).optBoolean("enabled")
-                if (enabled) BuglyInit.initWithConsent(context) else BuglyInit.revoke(context)
+                Prefs.setBuglyConsent(context, enabled)   // 已移除 Bugly SDK，仅保留开关状态供面板显示，不上传
                 return json(out, 200, JSONObject().put("ok", true).put("buglyConsent", Prefs.buglyConsent(context)))
             }
             path == "/api/device/uninstall-guard" && method == "DELETE" -> {

@@ -4,6 +4,7 @@ import android.content.ContentValues
 import android.content.Context
 import android.database.sqlite.SQLiteDatabase
 import android.database.sqlite.SQLiteOpenHelper
+import android.os.Build
 import org.json.JSONArray
 import org.json.JSONObject
 import java.util.Calendar
@@ -128,6 +129,13 @@ class LocalStore(context: Context) : SQLiteOpenHelper(context, "studyontv.db", n
         UUID.randomUUID().toString().also { set("admin_token", it) }
     }
 
+    /** 海信 VIDAA（国行聚好看）：桌面包即视频门户，看片时前台常驻桌面包，需要把桌面算作用中 */
+    private fun isVidaa(): Boolean {
+        val mf = Build.MANUFACTURER.orEmpty().lowercase()
+        val br = Build.BRAND.orEmpty().lowercase()
+        return listOf("hisense", "vidaa", "海信").any { mf.contains(it) || br.contains(it) }
+    }
+
     fun config(): JSONObject {
         val defaults = JSONObject().put("dailyMinutes", 40).put("dailyFreeMinutes", 0).put("sessionMinutes", 10)
             .put("questionsPerRound", 5).put("roundsPerDay", 3).put("passRatio", 0.6)
@@ -139,6 +147,7 @@ class LocalStore(context: Context) : SQLiteOpenHelper(context, "studyontv.db", n
             .put("praisePhrases", JSONArray(DEFAULT_PRAISE)).put("encouragePhrases", JSONArray(DEFAULT_ENCOURAGE))
             .put("autoNextSeconds", 0).put("scheduleMode", "allow").put("blockSettingsDuringControl", true).put("theme", if (BuildConfig.FLAVOR == "tv") "dark" else "system")
             .put("holidayMode", "sunday")
+            .put("countLauncherAsUsage", isVidaa())
             .put("quizSubjects", JSONArray()).put("quizLevels", JSONArray())
             .put("version", 1)
         val saved = try { JSONObject(get("config", "{}")) } catch (e: Exception) { JSONObject() }
@@ -227,7 +236,7 @@ class LocalStore(context: Context) : SQLiteOpenHelper(context, "studyontv.db", n
             require(input.getString("playMode") in listOf("round", "streak", "practice")) { "未知玩法" }
             next.put("playMode", input.getString("playMode"))
         }
-        listOf("extraEnabled", "difficultyRewardEnabled", "allDay", "spacedRepetitionEnabled", "blockSettingsDuringControl").forEach {
+        listOf("extraEnabled", "difficultyRewardEnabled", "allDay", "spacedRepetitionEnabled", "blockSettingsDuringControl", "countLauncherAsUsage").forEach {
             if (input.has(it)) next.put(it, input.getBoolean(it))
         }
         for (key in listOf("praisePhrases", "encouragePhrases")) if (input.has(key)) {

@@ -82,11 +82,6 @@ android {
     }
 }
 
-dependencies {
-    // Bugly 崩溃上报（用户同意后才初始化，见 BuglyInit.kt）
-    implementation(files("libs/bugly-crashreport.aar"))
-}
-
 // 把网页和题库同步进 assets（仓库里只维护 app/web、admin、data/seed.json 三份源）
 val repoRoot = rootProject.projectDir.parentFile.parentFile
 val syncWebAssets by tasks.registering(Sync::class) {
