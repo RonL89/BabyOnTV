@@ -71,7 +71,10 @@ class GateOverlay(
 
     fun suspend() {
         val view = web ?: return
-        if (attached) try { manager.removeViewImmediate(view) } catch (_: Exception) { }
+        if (attached) {
+            AudioPlayer.stop()
+            try { manager.removeViewImmediate(view) } catch (_: Exception) { }
+        }
         if (attached && !InputSupport.active) MediaPause.release(context)
         attached = false
     }
