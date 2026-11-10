@@ -56,7 +56,7 @@ open class DeviceBridge(protected val activity: Activity, private val connection
         .put("model", Build.MODEL).put("version", BuildConfig.VERSION_NAME).put("night", TvUi.systemNight(activity)).toString()
 
     @JavascriptInterface
-    fun lanInfo(): String = if (connectionAllowed) DeviceRuntime.connection(activity).toString() else ""
+    fun lanInfo(): String = DeviceRuntime.connection(activity).toString()
 
     @JavascriptInterface
     fun openParent() {
