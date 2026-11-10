@@ -1,0 +1,33 @@
+# 构建产物 / 本地环境
+/app/native/build/
+/app/native/app/build/
+/app/native/.gradle/
+/app/native/.idea/
+/app/native/local.properties
+*.iml
+
+# 杂项
+.DS_Store
+Thumbs.db
+*.log
+node_modules/
+
+# 构建时从 app/web、admin、data/seed.json 自动同步，不入库
+/app/native/app/src/main/assets/
+
+# 签名密钥 / 本地发布产物 / 诊断报告（绝不入库）
+/keystore/
+/dist/
+/release-artifacts/
+*.jks
+*.p12
+*.apk
+*.idsig
+StudyOnTV-*.apk
+BabyOnTV-*.apk
+
+# Kotlin compiler cache
+.kotlin/
+
+# 会话记忆（个人）
+/.memsearch/

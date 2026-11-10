@@ -1,0 +1,388 @@
+package com.babyontv.tv
+
+import android.app.KeyguardManager
+import android.app.Notification
+import android.app.NotificationChannel
+import android.app.NotificationManager
+import android.app.PendingIntent
+import android.app.Service
+import android.content.Context
+import android.content.Intent
+import android.graphics.Color
+import android.graphics.PixelFormat
+import android.os.Build
+import android.os.Handler
+import android.os.IBinder
+import android.os.Looper
+import android.os.PowerManager
+import android.os.SystemClock
+import android.view.Gravity
+import android.view.View
+import android.view.WindowManager
+
+/** 前台常驻服务：每秒检查前台应用，扣除/暂停使用时间，在需要时弹出学习门禁。 */
+class GateService : Service() {
+    private val handler = Handler(Looper.getMainLooper())
+    private var lastTick = SystemClock.elapsedRealtime()
+    private var wasUsing = false
+    private var lastGate = 0L
+    private var lastFallback = 0L
+    private var lastGateError = ""
+    private var lastDiag = ""
+    @Volatile private var settingsUntil = 0L
+    private val systemSettingsPackage by lazy {
+        packageManager.resolveActivity(Intent(android.provider.Settings.ACTION_SETTINGS), 0)?.activityInfo?.packageName
+    }
+    private var anchor: View? = null
+    private lateinit var overlay: GateOverlay
+    private val tick = object : Runnable {
+        override fun run() {
+            try { checkForeground() } catch (e: Exception) { android.util.Log.e("BabyOnTV", "Screen time check failed", e) }
+            handler.postDelayed(this, 1000)
+        }
+    }
+
+    private fun checkForeground() {
+        val now = SystemClock.elapsedRealtime()
+        val elapsed = now - lastTick
+        lastTick = now
+        if (wasUsing) DeviceRuntime.learning.consume(elapsed)
+        val canOverlay = GateOverlay.canDraw(this)
+        updateAnchor(canOverlay)
+        if (!canOverlay) overlay.hide()
+        val status = DeviceRuntime.learning.status()
+        val free = status.optBoolean("free")
+        if (free) MediaPause.releaseAll(this)
+        if (InputSupport.active) {
+            wasUsing = false
+            overlay.suspend(); WatchAccessibilityService.suspendGate()
+            return
+        }
+        if (now < settingsUntil) { wasUsing = false; hideAll(); return }
+        val power = getSystemService(POWER_SERVICE) as PowerManager
+        val locked = (getSystemService(KEYGUARD_SERVICE) as KeyguardManager).isKeyguardLocked
+        val awake = power.isInteractive && !locked
+        val monitoring = canOverlay || WatchAccessibilityService.connected || Foreground.hasUsageAccess(this)
+        val pkg = Foreground.current(this)
+        // 记住孩子正在用的应用，解锁后用它「回到原画面」
+        if (pkg != null && pkg != packageName && !exempt(pkg, false)) rememberActive(pkg)
+        // 桌面包名 == 首页包名的机型（海信 VIDAA 聚好看）：看片时前台仍是“桌面”包，
+        // 此时用系统播放状态兜底，否则永远不扣时间、到点也不弹题。
+        val active = awake && monitoring && when {
+            pkg == null -> canOverlay
+            !exempt(pkg) -> true
+            countLauncherAsUsage() && pkg == launcherPackage() -> true
+            else -> launcherPlaying(pkg)
+        }
+        val protecting = awake && monitoring && if (pkg == null) canOverlay else !exempt(pkg, false)
+        val reason = status.getString("reason")
+        // 解锁 / 任务完成后确保释放所有音频持有者，避免悬浮页收起后仍残留静音或音频焦点。
+        if (!free && !hasGate() && reason.isEmpty() && DeviceRuntime.store.get("review_feedback").isEmpty() &&
+            DeviceRuntime.store.config().optString("playMode") != "practice" && MediaPause.active) MediaPause.releaseAll(this)
+        val settingsBlocked = awake && monitoring && !free && pkg != null && isSettings(pkg) &&
+            DeviceRuntime.store.config().optBoolean("blockSettingsDuringControl", true) && !AdminAuth.recentlyVerified()
+        val gateReason = if (settingsBlocked) "settings" else reason
+        val pendingFeedback = DeviceRuntime.store.get("review_feedback").isNotEmpty()
+        val feedbackVisible = !free && hasGate() && pendingFeedback
+        if (!free) Foreground.learningActivity()?.let {
+            if (reason.isNotEmpty() || pendingFeedback || DeviceRuntime.store.config().optString("playMode") == "practice") MediaPause.pause(it)
+            else MediaPause.release(it)
+        }
+        wasUsing = active && !free && reason.isEmpty() && !feedbackVisible
+        if (!awake || !monitoring || (!settingsBlocked && ((reason.isEmpty() && !feedbackVisible) || (pkg != null && exempt(pkg, false))))) hideAll()
+        else if (pkg != null && !exempt(pkg, false) && free && !settingsBlocked) hideAll()
+        val snapshot = "reason=$gateReason free=$free awake=$awake monitoring=$monitoring pkg=$pkg active=$active gate=${hasGate()} overlay=$canOverlay"
+        if (snapshot != lastDiag) { lastDiag = snapshot; Diag.info("Gate", snapshot) }
+        if ((protecting || settingsBlocked) && gateReason.isNotEmpty() && now - lastGate > 1800 && !hasGate()) {
+            lastGate = now
+            // SDK < 26 的超老盒子悬浮 WebView 易黑屏，优先走全屏 Activity。
+            // 悬浮窗有权限时：无障碍覆盖层 → 悬浮 WebView；无权限时直接兜底 GateActivity。
+            val shown = if (Build.VERSION.SDK_INT < 26) false
+                else if (canOverlay) WatchAccessibilityService.showGate(gateReason) || overlay.show(gateReason)
+                else WatchAccessibilityService.showGate(gateReason)  // 无悬浮窗时无障碍仍可用
+            if (shown) lastGateError = ""
+            if (!shown) {
+                Diag.warn("Gate", "cannot show gate reason=$gateReason overlay=$canOverlay error=$lastGateError")
+                if (canOverlay && overlay.lastError.isNotEmpty()) lastGateError = overlay.lastError
+                // Android 10+ 默认限制后台启动 Activity，但有悬浮窗权限时属于系统豁免；
+                // 部分电视会拒绝 overlay，这里再尝试全屏学习页，并留一条可点击的通知。
+                // 自己已经在学习页上时不再重复拉起（否则会每 10 秒重置一次答题）。
+                val nowFallback = SystemClock.elapsedRealtime()
+                if (Foreground.learningActivity() == null && nowFallback - lastFallback > 10_000) {
+                    lastFallback = nowFallback
+                    try {
+                        startActivity(Intent(this, GateActivity::class.java)
+                            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+                            .putExtra("reason", gateReason))
+                    } catch (e: Exception) {
+                        lastGateError = "startActivity: " + (e.message ?: e.javaClass.simpleName)
+                        android.util.Log.w("BabyOnTV", "Cannot open gate activity", e)
+                    }
+                    notifyGateFallback(gateReason)
+                }
+            }
+        }
+    }
+
+    private fun updateAnchor(allowed: Boolean) {
+        val manager = getSystemService(WINDOW_SERVICE) as WindowManager
+        if (!allowed) {
+            anchor?.let { try { manager.removeViewImmediate(it) } catch (_: Exception) { } }
+            anchor = null
+        } else if (anchor == null) {
+            val view = View(this).apply { setBackgroundColor(Color.argb(1, 0, 0, 0)); importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO }
+            val params = WindowManager.LayoutParams(1, 1, GateOverlay.applicationWindowType(),
+                WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE or
+                    WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN, PixelFormat.TRANSLUCENT)
+            params.gravity = Gravity.TOP or Gravity.START
+            params.title = "BabyOnTV keepalive"
+            params.alpha = 0.01f
+            try { manager.addView(view, params); anchor = view } catch (_: Exception) { }
+        }
+    }
+
+    private fun hideAll() { overlay.hide(); WatchAccessibilityService.hideGate() }
+
+    private val mediaTick = object : Runnable {
+        override fun run() {
+            if (MediaPause.active && !InputSupport.active) MediaPause.enforce(this@GateService)
+            handler.postDelayed(this, 1000)
+        }
+    }
+
+    private fun checkOverlayPermission() {
+        val p = getSharedPreferences("botv", MODE_PRIVATE)
+        val granted = GateOverlay.canDraw(this)
+        if (granted) {
+            if (!p.getBoolean("overlay_was_granted", false)) p.edit().putBoolean("overlay_was_granted", true).apply()
+            return
+        }
+        if (!p.getBoolean("overlay_was_granted", false)) return
+        p.edit().putBoolean("overlay_was_granted", false).apply()
+        Diag.warn("Gate", "overlay permission was revoked by system")
+        try {
+            val manager = getSystemService(NOTIFICATION_SERVICE) as NotificationManager
+            val channelId = "botv_gate_alert"
+            if (Build.VERSION.SDK_INT >= 26) manager.createNotificationChannel(
+                NotificationChannel(channelId, "学习提醒", NotificationManager.IMPORTANCE_HIGH))
+            val pi = PendingIntent.getActivity(this, 2, Intent(this, OnboardingActivity::class.java),
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
+            val builder = if (Build.VERSION.SDK_INT >= 26) Notification.Builder(this, channelId) else Notification.Builder(this)
+            manager.notify(1003, builder.setContentTitle("悬浮窗权限缺失，答题拦截可能已停止")
+                .setContentText("孩子可能已绕过时间限制，请点此重新授权悬浮窗")
+                .setSmallIcon(android.R.drawable.ic_lock_idle_alarm).setContentIntent(pi)
+                .setAutoCancel(true).setOnlyAlertOnce(true).build())
+        } catch (e: Exception) { Diag.error("Gate", "cannot notify overlay revoked", e) }
+    }
+
+    private fun checkAccessibilityLost() {
+        // 如果无障碍曾经开启但现在不在服务列表（进程被杀后系统移除），发高优先级警告
+        val p = getSharedPreferences("botv", MODE_PRIVATE)
+        val wasEnabled = p.getBoolean("accessibility_was_enabled", false)
+        val nowEnabled = WatchAccessibilityService.enabled(this)
+        p.edit().putBoolean("accessibility_was_enabled", nowEnabled).apply()
+        if (!wasEnabled || nowEnabled) return   // 未开过或现在正常，不报警
+        try {
+            val manager = getSystemService(NOTIFICATION_SERVICE) as NotificationManager
+            val channelId = "botv_gate_alert"
+            if (Build.VERSION.SDK_INT >= 26) manager.createNotificationChannel(
+                NotificationChannel(channelId, "学习提醒", NotificationManager.IMPORTANCE_HIGH))
+            val pi = PendingIntent.getActivity(this, 5, Intent(this, OnboardingActivity::class.java),
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
+            val builder = if (Build.VERSION.SDK_INT >= 26) Notification.Builder(this, channelId) else Notification.Builder(this)
+            manager.notify(1005, builder
+                .setContentTitle("无障碍权限缺失，答题拦截可能已停止")
+                .setContentText("孩子可能已绕过时间限制，请点此重新开启无障碍服务")
+                .setSmallIcon(android.R.drawable.ic_lock_idle_alarm)
+                .setContentIntent(pi).setAutoCancel(true).setOnlyAlertOnce(false).build())
+            Diag.warn("Gate", "accessibility lost after restart, notified parent")
+        } catch (e: Exception) { Diag.error("Gate", "cannot notify accessibility lost", e) }
+    }
+
+    private fun notifyGateFallback(reason: String) {
+        try {
+            val manager = getSystemService(NOTIFICATION_SERVICE) as NotificationManager
+            val channelId = "botv_gate_alert"
+            if (Build.VERSION.SDK_INT >= 26) manager.createNotificationChannel(
+                NotificationChannel(channelId, "学习提醒", NotificationManager.IMPORTANCE_HIGH))
+            val intent = Intent(this, GateActivity::class.java)
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP).putExtra("reason", reason)
+            val pi = PendingIntent.getActivity(this, 1, intent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
+            val builder = if (Build.VERSION.SDK_INT >= 26) Notification.Builder(this, channelId) else Notification.Builder(this)
+            manager.notify(1002, builder.setContentTitle("到学习时间了")
+                .setContentText("没自动弹出学习页时，点这里开始答题")
+                .setSmallIcon(android.R.drawable.ic_lock_idle_alarm).setContentIntent(pi)
+                .setAutoCancel(true).setOnlyAlertOnce(true).build())
+        } catch (e: Exception) { android.util.Log.w("BabyOnTV", "Cannot post fallback notification", e) }
+    }
+
+    /**
+     * 系统解析出来的 HOME 包。
+     *
+     * 不能长期缓存：用户可能先装应用再换默认桌面，部分固件也会在升级后改 HOME 包名，
+     * 一旦缓存了旧值，「桌面包在播放」的判定就永远不会命中。
+     * 这里只做 10 秒短缓存，和 exempt() 里每秒 resolveActivity 的开销相当。
+     */
+    private var launcherPkgCache: String? = null
+    private var launcherPkgAt = 0L
+    private fun launcherPackage(): String? {
+        val now = SystemClock.elapsedRealtime()
+        if (now - launcherPkgAt < 10_000) return launcherPkgCache
+        launcherPkgCache = try {
+            packageManager.resolveActivity(Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_HOME), 0)?.activityInfo?.packageName
+        } catch (_: Exception) { null }
+        launcherPkgAt = now
+        return launcherPkgCache
+    }
+
+    /**
+     * 只有「厂商把播放器塞进了 HOME 包」这一个特殊情况才把桌面算成在用，
+     * 已知的系统桌面（Foreground.isLauncher）永远不算，避免在桌面挂着就被计时。
+     */
+    private fun launcherPlaying(pkg: String): Boolean {
+        if (pkg != launcherPackage()) return false
+        if (Foreground.isLauncher(pkg)) return false
+        return Playback.hasActive(this)
+    }
+
+    /** 海信 VIDAA 等机型：厂商桌面即视频门户，前台常驻桌面包时按配置直接算作用中，不依赖不可靠的播放检测 */
+    private fun countLauncherAsUsage(): Boolean =
+        DeviceRuntime.store.config().optBoolean("countLauncherAsUsage", false)
+
+    private fun isSettings(pkg: String): Boolean = pkg == systemSettingsPackage ||
+        pkg in setOf("com.android.settings", "com.android.tv.settings", "com.google.android.tv.settings")
+
+    private fun exempt(pkg: String, includeLauncher: Boolean = true): Boolean {
+        if (pkg == packageName || pkg == "com.android.systemui" || pkg == "android" || pkg.contains("packageinstaller")) return true
+        if (pkg.contains("permissioncontroller") || pkg.contains("inputmethod") || pkg.contains("keyboard")) return true
+        if (pkg == systemSettingsPackage || pkg in setOf("com.android.settings", "com.android.tv.settings", "com.google.android.tv.settings", "com.google.android.dialer", "com.android.dialer", "com.android.phone", "com.android.server.telecom", "com.android.emergency")) return true
+        if (!includeLauncher) return false
+        val launcher = packageManager.resolveActivity(Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_HOME), 0)?.activityInfo?.packageName
+        return pkg == launcher || Foreground.isLauncher(pkg)
+    }
+
+    override fun onCreate() {
+        super.onCreate()
+        DeviceRuntime.ensure(this)
+        overlay = GateOverlay(this, GateOverlay.applicationWindowType())
+        instance = this
+        Prefs.setServiceRunning(this, true)
+        val channelId = "botv_gate"
+        val manager = getSystemService(NOTIFICATION_SERVICE) as NotificationManager
+        if (Build.VERSION.SDK_INT >= 26) manager.createNotificationChannel(NotificationChannel(channelId, "使用时间管理", NotificationManager.IMPORTANCE_LOW))
+        val pi = PendingIntent.getActivity(this, 0, Intent(this, MainActivity::class.java), PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
+        val builder = if (Build.VERSION.SDK_INT >= 26) Notification.Builder(this, channelId) else Notification.Builder(this)
+        val notification = builder.setContentTitle("BabyOnTV · 使用时间管理中").setContentText("点击打开学习任务")
+            .setSmallIcon(android.R.drawable.ic_lock_idle_alarm).setContentIntent(pi).setOngoing(true).build()
+        if (Build.VERSION.SDK_INT >= 34) startForeground(1001, notification, android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE)
+        else startForeground(1001, notification)
+        MediaPause.recover(this)
+        checkOverlayPermission()
+        checkAccessibilityLost()
+        Diag.info("Service", "GateService started via=$startVia")
+        Watchdog.serviceStarted(this, startVia)
+        Watchdog.schedule(this)
+        Watchdog.scheduleAlarm(this)
+        handler.post(tick)
+        handler.postDelayed(mediaTick, 1000)
+    }
+
+    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int = START_STICKY
+    override fun onBind(intent: Intent?): IBinder? = null
+
+    /** 手机上从“最近任务”划掉应用时，部分系统会连带停止服务；2 秒后自动拉起 */
+    override fun onTaskRemoved(rootIntent: Intent?) {
+        scheduleRestart(this, 2000)
+        super.onTaskRemoved(rootIntent)
+    }
+
+    override fun onDestroy() {
+        try { DeviceRuntime.learning.flushUsage() } catch (_: Exception) { }
+        if (Prefs.onboarded(this)) scheduleRestart(this, 5000)
+        handler.removeCallbacks(tick); handler.removeCallbacks(mediaTick)
+        MediaPause.release(this)
+        overlay.destroy(); WatchAccessibilityService.hideGate(); updateAnchor(false)
+        instance = null
+        Prefs.setServiceRunning(this, false)
+        Diag.info("Service", "GateService destroyed")
+        super.onDestroy()
+    }
+
+    companion object {
+        private var instance: GateService? = null
+        private var startVia = "app"
+
+        /**
+         * 孩子最近真正在用的受控应用。答题解锁后用它把画面还原，
+         * 而不是让系统跳回桌面。
+         */
+        @Volatile private var lastActivePackage: String? = null
+        fun rememberActive(pkg: String) { lastActivePackage = pkg }
+        fun rememberedActive(): String? = lastActivePackage
+        val running: Boolean get() = instance != null
+
+        fun start(context: Context) {
+            val intent = Intent(context, GateService::class.java)
+            if (Build.VERSION.SDK_INT >= 26) context.startForegroundService(intent) else context.startService(intent)
+        }
+
+        /** 不抛异常的启动：后台启动前台服务在 Android 12+ 可能被拒绝（有悬浮窗 / 无障碍权限时通常允许） */
+        fun ensureRunning(context: Context, via: String = "") {
+            if (instance != null || !Prefs.onboarded(context)) return
+            if (via.isNotEmpty()) startVia = via
+            try { start(context) } catch (e: Exception) { android.util.Log.w("BabyOnTV", "GateService restart refused", e) }
+        }
+
+        fun scheduleRestart(context: Context, delayMs: Long) {
+            try {
+                val intent = Intent(context, GateService::class.java)
+                val flags = PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+                val pending = if (Build.VERSION.SDK_INT >= 26) PendingIntent.getForegroundService(context, 7, intent, flags)
+                    else PendingIntent.getService(context, 7, intent, flags)
+                val alarm = context.getSystemService(Context.ALARM_SERVICE) as android.app.AlarmManager
+                alarm.set(android.app.AlarmManager.ELAPSED_REALTIME_WAKEUP, SystemClock.elapsedRealtime() + delayMs, pending)
+            } catch (e: Exception) { android.util.Log.w("BabyOnTV", "Cannot schedule restart", e) }
+        }
+        fun hasGate(): Boolean = WatchAccessibilityService.hasGate() || instance?.overlay?.isShowing == true
+        /** 家长面板里的能力自检；不依赖服务是否在运行 */
+        fun diagnostics(context: Context): org.json.JSONObject = org.json.JSONObject()
+            .put("service", running)
+            .put("overlay", GateOverlay.canDraw(context))
+            .put("usage", Foreground.hasUsageAccess(context))
+            .put("accessibility", WatchAccessibilityService.connected)
+            .put("accessibilityEnabled", WatchAccessibilityService.enabled(context))
+            .put("gate", hasGate())
+            .put("lastTickSeconds", if (instance == null) -1 else ((SystemClock.elapsedRealtime() - (instance?.lastTick ?: 0)) / 1000))
+            .put("lastError", instance?.lastGateError ?: "")
+        fun hideGates() {
+            Handler(Looper.getMainLooper()).post { instance?.overlay?.hide(); WatchAccessibilityService.hideGate() }
+        }
+        fun onOwnActivityResumed() {
+            instance?.settingsUntil = 0L
+            Handler(Looper.getMainLooper()).post {
+                if (InputSupport.active) { instance?.overlay?.suspend(); WatchAccessibilityService.suspendGate() }
+                else { instance?.overlay?.hide(); WatchAccessibilityService.hideGate() }
+            }
+        }
+        fun openingSystemPage(parentAuthorized: Boolean = false) {
+            if (parentAuthorized) AdminAuth.markVerified()
+            instance?.let { service ->
+                val canIdentify = WatchAccessibilityService.connected || Foreground.hasUsageAccess(service)
+                val settingsLocked = !DeviceRuntime.learning.status().optBoolean("free") &&
+                    DeviceRuntime.store.config().optBoolean("blockSettingsDuringControl", true)
+                // 允许安装更新；但不能因此让孩子访问所有系统设置页
+                if (!parentAuthorized && !AdminAuth.recentlyVerified() && canIdentify && settingsLocked) return
+                service.settingsUntil = SystemClock.elapsedRealtime() + 120000
+                service.wasUsing = false
+            }
+            hideGates()
+        }
+        /** 遥控操作后立即重新检查，不等下一秒；锁定时去掉 1.8 秒的防抖 */
+        fun refreshNow() {
+            instance?.handler?.post { instance?.lastGate = 0L; instance?.checkForeground() }
+        }
+        fun onForegroundChanged(context: Context, pkg: String?) {
+            instance?.handler?.post { instance?.checkForeground() }
+        }
+    }
+}

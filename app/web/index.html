@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no">
+<meta name="theme-color" content="#141414">
+<title>BabyOnTV · 先学再看</title>
+<link rel="stylesheet" href="assets/css/tv.css">
+</head>
+<body>
+<div class="bg"><div class="glow glow-a"></div><div class="glow glow-b"></div><div class="grain"></div></div>
+<header class="topbar">
+  <div class="brand"><span class="logo"><i></i></span><span class="brand-text">BabyOnTV</span></div>
+  <div class="topright"><span class="pill" id="topPill">正在连接…</span><span class="clock" id="clock"></span></div>
+</header>
+<div class="update-tip" id="updateTip"><span class="update-text" id="updateText"></span><button class="update-btn focusable" id="updateGo" data-action="update-go">更新</button><button class="update-close focusable" id="updateClose" data-action="update-close" aria-label="关闭">×</button></div>
+<main id="stage">
+  <section class="screen" id="screen-quiz">
+    <div class="quiz-wrap">
+      <div class="quiz-head"><div class="crumb"><span class="crumb-main" id="qMode">学习任务</span></div><div class="counter"><b id="qIndex">0</b><i id="qTotal"></i></div></div>
+      <div class="qcard">
+        <p class="question" id="qText"></p>
+        <div class="q-meta"><span id="qDots"></span><span id="qPool"></span></div>
+        <div class="options" id="qOptions"></div>
+        <div class="feedback" id="qFeedback" role="status" aria-live="polite"><div class="fb-icon" id="fbIcon"></div><div class="fb-body"><div class="fb-title" id="fbTitle"></div><div class="fb-answer" id="fbAnswer"></div><div class="fb-tip" id="fbTip"></div></div><button class="btn btn-primary focusable" id="fbNext" data-action="next">继续</button></div>
+      </div>
+    </div>
+  </section>
+  <section class="screen" id="screen-lock">
+    <div class="lock-wrap"><div class="lock-badge" id="lockIcon"></div><h1 class="lock-title" id="lockTitle"></h1><p class="lock-desc" id="lockDesc"></p><div class="lock-actions" id="lockActions"></div><p class="lock-note" id="lockNote"></p></div>
+  </section>
+  <section class="screen" id="screen-pair">
+    <div class="pair-wrap"><h1 class="pair-title">用手机管理这台设备</h1><div class="pair-qr" id="pairQr"></div><p class="pair-url" id="pairUrl"></p><div class="pair-actions" id="pairActions"></div><p class="pair-note">扫码或输入地址，输入管理密码即可调整规则、查看记录。</p><button class="btn btn-ghost focusable" data-action="quiz">返回学习</button></div>
+  </section>
+  <div class="toast" id="toast"></div>
+</main>
+<script src="assets/js/qrcode.js"></script>
+<script src="assets/js/app.js"></script>
+</body>
+</html>
