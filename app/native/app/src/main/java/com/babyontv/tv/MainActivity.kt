@@ -7,6 +7,8 @@ import android.view.KeyEvent
 import android.view.View
 import android.view.WindowManager
 import android.webkit.WebView
+import android.webkit.WebViewClient
+import android.webkit.WebChromeClient
 
 open class MainActivity : Activity() {
     protected lateinit var web: WebView
@@ -58,10 +60,15 @@ open class MainActivity : Activity() {
     }
 
     private fun createWeb() {
-        web = WebShell(this).create("about:blank")
-        web.addJavascriptInterface(DeviceBridge(this, false, web), "BOTVNative")
+        // 先配置 WebView settings，再注入 JS 接口，最后 loadUrl —— 彻底消除桥接竞态
+        web = WebView(this).apply {
+            WebShell.configureSettings(this)
+            addJavascriptInterface(DeviceBridge(this@MainActivity, false, this), "BOTVNative")
+        }
         setContentView(web)
-        web.loadUrl(Prefs.localBase(this) + "#/$page")
+        // 清理缓存 + 版本号 cache-busting，覆盖安装后强制刷新
+        web.clearCache(true)
+        web.loadUrl("${Prefs.localBase(this)}#/$page?v=${BuildConfig.VERSION_CODE}")
         web.requestFocus()
         webReleased = false
     }

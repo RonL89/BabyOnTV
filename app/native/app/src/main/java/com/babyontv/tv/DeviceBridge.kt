@@ -11,6 +11,10 @@ import org.json.JSONObject
 import java.util.Locale
 
 open class DeviceBridge(protected val activity: Activity, private val connectionAllowed: Boolean = false, private val web: android.webkit.WebView? = null) {
+    
+    /** 仅允许配对页调用 lanInfo，防止学习页/锁屏页未授权获取局域网信息 */
+    private val isPairPage: Boolean
+        get() = web?.url?.contains("#/pair") == true
     @JavascriptInterface
     fun answerInput(voice: Boolean) {
         activity.runOnUiThread { web?.let { InputSupport.open(activity, it, voice) } }
@@ -56,7 +60,10 @@ open class DeviceBridge(protected val activity: Activity, private val connection
         .put("model", Build.MODEL).put("version", BuildConfig.VERSION_NAME).put("night", TvUi.systemNight(activity)).toString()
 
     @JavascriptInterface
-    fun lanInfo(): String = DeviceRuntime.connection(activity).toString()
+    fun lanInfo(): String {
+        // 仅配对页放行；其他页面需 connectionAllowed（学习页/锁屏页为 false）
+        return if (isPairPage || connectionAllowed) DeviceRuntime.connection(activity).toString() else "{}"
+    }
 
     @JavascriptInterface
     fun openParent() {

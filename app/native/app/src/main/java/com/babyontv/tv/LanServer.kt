@@ -13,7 +13,7 @@ import java.net.ServerSocket
 import java.net.Socket
 import java.util.concurrent.Executors
 
-/** 局域网 HTTP 服务：孩子端学习页、家长面板与集成 API 全部经由它提供（默认 8099 端口）。 */
+/** 局域网 HTTP 服务：孩子端学习页、家长面板与集成 API 全部经由它提供（默认 8099 端口，冲突自动递增重试 8099~8118）。 */
 class LanServer(
     private val context: Context,
     private val store: LocalStore,
@@ -24,12 +24,15 @@ class LanServer(
     // 浏览器会并发 6 个连接加载面板，线程太少会排队；静态文件已缓存压缩，CPU 开销很小
     private val pool = Executors.newFixedThreadPool(if (BuildConfig.FLAVOR == "tv") 4 else 6)
     @Volatile private var running = false
-    var boundPort: Int = port
+    var boundPort: Int = -1
         private set
+
+    /** 最大尝试端口数（8099~8118 共 20 个端口） */
+    private val maxPortAttempts = 20
 
     fun start() {
         if (running) return
-        boundPort = tryBind(port) ?: tryBind(8090) ?: return
+        boundPort = findAvailablePort(port, maxPortAttempts) ?: return
         running = true
         Thread {
             while (running) {
@@ -46,6 +49,18 @@ class LanServer(
     fun stop() {
         running = false
         try { socket?.close() } catch (e: Exception) { }
+    }
+
+    /** 从 startPort 开始递增尝试 maxAttempts 个端口，返回首个可用端口 */
+    private fun findAvailablePort(startPort: Int, maxAttempts: Int): Int? {
+        for (i in 0 until maxAttempts) {
+            val p = startPort + i
+            try {
+                ServerSocket(p).use { it.close() }
+                return p
+            } catch (_: Exception) { }
+        }
+        return null
     }
 
     private fun tryBind(p: Int): Int? = try {

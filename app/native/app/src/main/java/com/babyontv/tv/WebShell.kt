@@ -32,8 +32,9 @@ class WebShell(private val context: Context) {
         s.setSupportZoom(false)
         s.builtInZoomControls = false
         s.displayZoomControls = false
-        s.useWideViewPort = true
+        s.useWideViewPort = false
         s.loadWithOverviewMode = false
+        web.setInitialScale(100)
         s.userAgentString = s.userAgentString + " BabyOnTV/${BuildConfig.VERSION_NAME} (Android)"
 
         web.webViewClient = object : WebViewClient() {
@@ -74,6 +75,38 @@ class WebShell(private val context: Context) {
             } catch (_: Throwable) {
                 false
             }
+        }
+
+        /** 仅配置 WebView settings，不执行 loadUrl —— 供桥接先注入场景使用 */
+        @SuppressLint("SetJavaScriptEnabled")
+        fun configureSettings(web: WebView) {
+            web.setBackgroundColor(android.graphics.Color.parseColor("#141414"))
+            web.isFocusable = true
+            web.isFocusableInTouchMode = true
+
+            val s = web.settings
+            s.javaScriptEnabled = true
+            s.domStorageEnabled = true
+            s.databaseEnabled = true
+            s.cacheMode = WebSettings.LOAD_NO_CACHE
+            s.loadsImagesAutomatically = true
+            s.blockNetworkImage = false
+            s.mediaPlaybackRequiresUserGesture = false
+            s.allowFileAccess = false
+            s.setSupportZoom(false)
+            s.builtInZoomControls = false
+            s.displayZoomControls = false
+            s.useWideViewPort = false
+            s.loadWithOverviewMode = false
+            web.setInitialScale(100)
+            s.userAgentString = s.userAgentString + " BabyOnTV/${BuildConfig.VERSION_NAME} (Android)"
+
+            web.webViewClient = object : WebViewClient() {
+                override fun shouldOverrideUrlLoading(view: WebView?, url: String?): Boolean {
+                    return !isAllowed(url)
+                }
+            }
+            web.webChromeClient = WebChromeClient()
         }
 
         object PrefsHolder {

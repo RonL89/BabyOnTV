@@ -12,6 +12,12 @@
   };
   var toastTimer, nextTimer, taps = 0, lastTap = 0, upTaps = 0, lastUpTap = 0;
 
+  // 统一清理所有定时器，防止状态切换时残留导致 UI 卡死
+  function hideAllTimers() {
+    if (toastTimer) { window.clearTimeout(toastTimer); toastTimer = null; }
+    if (nextTimer) { window.clearTimeout(nextTimer); nextTimer = null; }
+  }
+
   function nativeCall(name, args) {
     var bridge = window.BOTVNative;
     try { if (bridge && typeof bridge[name] === 'function') return bridge[name].apply(bridge, args || []); } catch (e) {}
@@ -42,6 +48,7 @@
     toastTimer = window.setTimeout(function () { box.className = 'toast'; }, 3000);
   }
   function show(screen) {
+    hideAllTimers();
     all('.screen').forEach(function (el) { el.className = 'screen'; });
     $('screen-' + screen).className = 'screen active';
     state.screen = screen;
@@ -83,6 +90,7 @@
   }
 
   function start() {
+    hideAllTimers();
     if (state.busy) return;
     state.busy = true;
     request('/api/quiz/start', {}, function (error, result) {
@@ -280,6 +288,7 @@
     focusDefault();
   }
   function lock(reason) {
+    hideAllTimers();
     state.lockReason = reason;
     stopAudio();
     show('lock'); state.round = null;
@@ -313,6 +322,7 @@
     focusDefault();
   }
   function pair() {
+    hideAllTimers();
     stopAudio();
     var raw = nativeCall('lanInfo'), info;
     try { info = JSON.parse(raw); } catch (e) {}
@@ -415,6 +425,7 @@
     if (action === 'quiz') { if (state.screen === 'pair') nativeCall('backToQuiz'); else start(); }
   }
   function route() {
+    hideAllTimers();
     window.clearTimeout(nextTimer); state.busy = false; hideFeedback();
     var hash = location.hash || '#/quiz';
     state.settingsGate = hash.indexOf('reason=settings') >= 0;

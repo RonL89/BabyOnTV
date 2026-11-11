@@ -10,12 +10,14 @@ import android.content.Context
 import android.content.Intent
 import android.graphics.Color
 import android.graphics.PixelFormat
+import android.net.Uri
 import android.os.Build
 import android.os.Handler
 import android.os.IBinder
 import android.os.Looper
 import android.os.PowerManager
 import android.os.SystemClock
+import android.provider.Settings
 import android.view.Gravity
 import android.view.View
 import android.view.WindowManager
@@ -199,6 +201,19 @@ class GateService : Service() {
         } catch (e: Exception) { Diag.error("Gate", "cannot notify accessibility lost", e) }
     }
 
+    /** Android 7.0+ 请求忽略电池优化（防止厂商 ROM 后台杀服务） */
+    private fun requestIgnoredBatteryOptimization() {
+        if (Build.VERSION.SDK_INT >= 23) {
+            val pm = getSystemService(POWER_SERVICE) as PowerManager
+            if (!pm.isIgnoringBatteryOptimizations(packageName)) {
+                val intent = Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS)
+                    .setData(Uri.parse("package:$packageName"))
+                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                try { startActivity(intent) } catch (_: Exception) { }
+            }
+        }
+    }
+
     private fun notifyGateFallback(reason: String) {
         try {
             val manager = getSystemService(NOTIFICATION_SERVICE) as NotificationManager
@@ -276,6 +291,10 @@ class GateService : Service() {
             .setSmallIcon(android.R.drawable.ic_lock_idle_alarm).setContentIntent(pi).setOngoing(true).build()
         if (Build.VERSION.SDK_INT >= 34) startForeground(1001, notification, android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE)
         else startForeground(1001, notification)
+        
+        // Android 7.0+ 电池优化白名单引导（防止海信等厂商 ROM 后台杀服务）
+        requestIgnoredBatteryOptimization()
+        
         MediaPause.recover(this)
         checkOverlayPermission()
         checkAccessibilityLost()
