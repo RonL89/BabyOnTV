@@ -79,17 +79,27 @@ scripts/         语音生成、截图、更新清单脚本
 
 ## 版本历史
 
+### v1.0.8 (2026-11-11) — 修复「网页无法打开」致命回归
+
+> v1.0.5 / v1.0.6 / v1.0.7 三个版本全部无法启动，装好后只显示 `net::ERR_CONNECTION_REFUSED`，本版修复。
+
+- **修复**：本地 HTTP 服务从未真正监听 — `LanServer.start()` 在 v1.0.5 被改成"探测端口后立即关闭"，`socket` 始终为 `null`，`accept()` 抛出异常被吞掉。WebView 去连 `127.0.0.1:8099` 必然被拒绝。现在逐个端口真正 `bind` 并复用同一个 socket
+- **修复**：端口兜底 — 历史版本会把 `boundPort = -1` 写进 SharedPreferences，导致地址变成 `http://127.0.0.1:-1/`；读取时拒绝非法端口
+- **修复**：应用图标不生效 — `AndroidManifest.xml` 指向 `@drawable/ic_launcher`（一个橙色三角矢量图），熊抱电视的 `mipmap` 图标从未被使用。改用 `@mipmap/ic_launcher` + `roundIcon`，并补上 Android 8+ 自适应图标与 5 档 TV banner
+- **修复**：应用名不生效 — TV flavor 的 `strings.xml` 把 `app_name` 覆盖成 `BabyOnTV · TV`，主 strings 里的「宝宝请听题」对电视包无效
+- **修复**：快捷面板按钮全部 403 — `/api/remote` 只认家长会话与集成令牌，而面板用设备令牌调用；现在 loopback + `X-Device-Token` 放行
+- **优化**：网页与管理面板品牌统一（熊 logo + 中文名），`gen_icons.py` 重写为可复用的图标生成脚本
+
 ### v1.0.7 (2026-11-11) — 电视端家长控制快捷面板 + 全屏加固
 - **新增**：电视端家长控制快捷面板 — 长按左上角品牌区 1.5 秒或按遥控器 MENU 键，弹出「解锁 30 分钟 / 解锁 60 分钟 / 立即进入管控 / 取消 / 无限额解锁」5 个快捷开关，无需手机扫码即可临时放行
 - **新增**：`BOTV_RESET_TIMER` 前端事件 — 管控解除时自动复位前端计时器与状态机，避免倒计时残留
 - **修复**：答题页全屏适配 — `html, body` 强制 `100vw/100vh` 且零外边距，配合 viewport `maximum-scale=1.0, user-scalable=no`，解决小窗口渲染
 - **优化**：仓库体积 — 本地构建工具链 `.tools/`（JDK / Android SDK，约 900MB、1.2 万文件）加入 `.gitignore` 并移出版本库，仓库拉取/推送恢复正常
 
-### v1.0.6 (2026-11-11) — 图标、名称与遥控器全键位支持
-- **新增**：应用图标替换为熊抱电视插画（全套 mipmap 密度 48/72/96/144/192px）
-- **新增**：应用名称改为「宝宝请听题」
+### v1.0.6 (2026-11-11) — 遥控器全键位支持
 - **修复**：电视端遥控器全键位可操作 — 所有按钮、权限列表行新增 DPAD_CENTER/Enter 键监听，修复 OnboardingActivity 权限引导页「去开启」按钮无法用遥控器选中、ParentActivity 密码验证页按钮遥控器不可用问题
-- **构建**：TV / Mobile release APK 编译通过（9.1 MB），无新增 lint 错误
+- **构建**：TV / Mobile release APK 编译通过，无新增 lint 错误
+- **注意**：本版申报的「图标替换」与「应用名改为宝宝请听题」实际未生效，直至 v1.0.8 才修正
 
 ### v1.0.5 (2026-11-11) — 7 项关键修复与稳定性加固
 - **修复**：WebView 全屏渲染 — `useWideViewPort=false` + `setInitialScale(100)` 彻底解决界面只显示左上角
