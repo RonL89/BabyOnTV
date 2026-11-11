@@ -85,6 +85,15 @@ scripts/         语音生成、截图、更新清单脚本
 - **修复**：电视端遥控器全键位可操作 — 所有按钮、权限列表行新增 DPAD_CENTER/Enter 键监听，修复 OnboardingActivity 权限引导页「去开启」按钮无法用遥控器选中、ParentActivity 密码验证页按钮遥控器不可用问题
 - **构建**：TV / Mobile release APK 编译通过（9.1 MB），无新增 lint 错误
 
+### v1.0.5 (2026-11-11) — 7 项关键修复与稳定性加固
+- **修复**：WebView 全屏渲染 — `useWideViewPort=false` + `setInitialScale(100)` 彻底解决界面只显示左上角
+- **修复**：覆盖安装缓存残留 — `web.clearCache(true)` + `?v=VERSION_CODE` 双重 cache-busting
+- **修复**：JS 桥接注入时序竞态 — 重构 `createWeb()` 先配置/注入桥接后 `loadUrl`，语音播报 100% 就绪
+- **修复**：`lanInfo()` 越权访问风险 — 仅配对页 `#/pair` 放行，学习页/锁屏页仍需授权
+- **修复**：前端定时器泄漏导致 UI 残留 — 新增 `hideAllTimers()` 统一清理所有状态切换
+- **新增**：LAN 端口冲突容灾 — 8099 起始自动递增重试 8099~8118（共 20 端口）
+- **加固**：Android 7.0 (海信 VIDAA) 后台防杀 — 新增 `requestIgnoredBatteryOptimization()` 引导电池优化白名单
+
 ### v1.0.4 (2026-11-10) — 电视实测 3 个严重 Bug 修复
 - **修复**：答题时没有读题目 — 调整 JS 桥接注入时序，`addJavascriptInterface` 先于 `loadUrl`，语音播报 100% 就绪
 - **修复**：答题界面只占屏幕左上角 — `MainActivity.onCreate` 新增沉浸式全屏标志，TV / Mobile 均生效
