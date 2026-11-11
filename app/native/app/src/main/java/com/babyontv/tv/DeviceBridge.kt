@@ -8,13 +8,37 @@ import android.os.Build
 import android.speech.tts.TextToSpeech
 import android.webkit.JavascriptInterface
 import org.json.JSONObject
+import java.io.OutputStream
+import java.net.HttpURLConnection
+import java.net.URL
+import java.nio.charset.Charset
 import java.util.Locale
+import java.util.concurrent.TimeUnit
 
 open class DeviceBridge(protected val activity: Activity, private val connectionAllowed: Boolean = false, private val web: android.webkit.WebView? = null) {
     
     /** 仅允许配对页调用 lanInfo，防止学习页/锁屏页未授权获取局域网信息 */
     private val isPairPage: Boolean
         get() = web?.url?.contains("#/pair") == true
+
+    /** 向本地 LAN Server 发起 POST 请求（TV 端快捷面板专用） */
+    private fun postToLanServer(path: String, body: JSONObject): Boolean = try {
+        val conn = URL("http://127.0.0.1:${LanServer.getBoundPort()}$path").openConnection() as HttpURLConnection
+        conn.doOutput = true
+        conn.requestMethod = "POST"
+        conn.connectTimeout = 3000
+        conn.readTimeout = 5000
+        conn.setRequestProperty("Content-Type", "application/json; charset=utf-8")
+        conn.setRequestProperty("X-Device-Token", AdminAuth.deviceToken)
+        conn.outputStream.use { it.write(body.toString().toByteArray(Charset.forName("UTF-8"))) }
+        val code = conn.responseCode
+        conn.disconnect()
+        code in 200..299
+    } catch (e: Exception) {
+        Diag.warn("UI", "postToLanServer $path failed: ${e.message}")
+        false
+    }
+    
     @JavascriptInterface
     fun answerInput(voice: Boolean) {
         activity.runOnUiThread { web?.let { InputSupport.open(activity, it, voice) } }
@@ -118,6 +142,35 @@ open class DeviceBridge(protected val activity: Activity, private val connection
         activity.runOnUiThread {
             activity.startActivity(Intent(activity, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP))
             if (activity is ParentActivity) activity.finish()
+        }
+    }
+
+    // TV端快捷面板专用：不检查 connectionAllowed，直接调用本地 LAN Server /api/remote
+    @JavascriptInterface
+    fun quickUnlock(minutes: Int) {
+        activity.runOnUiThread {
+            postToLanServer("/api/remote", org.json.JSONObject().put("action", "unlock").put("minutes", minutes))
+        }
+    }
+
+    @JavascriptInterface
+    fun quickLock() {
+        activity.runOnUiThread {
+            postToLanServer("/api/remote", org.json.JSONObject().put("action", "lock"))
+        }
+    }
+
+    @JavascriptInterface
+    fun quickCancel() {
+        activity.runOnUiThread {
+            postToLanServer("/api/remote", org.json.JSONObject().put("action", "cancel"))
+        }
+    }
+
+    @JavascriptInterface
+    fun quickIndefinite() {
+        activity.runOnUiThread {
+            postToLanServer("/api/remote", org.json.JSONObject().put("action", "indefinite"))
         }
     }
 

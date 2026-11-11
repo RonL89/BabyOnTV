@@ -515,6 +515,16 @@
     try { if (!info.force && window.localStorage.getItem('botv_update_dismissed') === info.latest) return; } catch (e) {} $('updateText').textContent = '发现新版本 v' + info.latest; $('updateTip').className = 'update-tip show'; };
   window.TV = { move: move, select: function () { activate(); }, back: function () { if (!state.learning.reason && (state.learning.remainingSeconds > 0 || state.learning.free)) nativeCall('exitToLauncher'); else toast('现在暂不可用'); }, state: state };
   window.BOTV_RESUME = function () { if (document.readyState === 'complete' && !state.busy && state.screen !== 'pair') route(); };
+  // GateService 解锁/收起门禁时调用：重置前端计时器与状态机，防止锁屏页卡死
+  window.BOTV_RESET_TIMER = function () {
+    hideAllTimers();
+    state.busy = false;
+    state.awaiting = false;
+    state.reviewed = false;
+    state.feedback = null;
+    hideFeedback();
+    if (state.screen === 'lock') { state.lockReason = ''; route(); }
+  };
   window.addEventListener('hashchange', route);
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot); else boot();
 })();

@@ -43,7 +43,7 @@ class OnboardingActivity : Activity() {
 
         // 左侧：标题、当前状态、操作
         val intro = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
-        intro.addView(TvUi.text(this, "B a b y O n T V", 13f, p.ok, true))
+        intro.addView(TvUi.text(this, "宝宝请听题", 13f, p.ok, true))
         intro.addView(TvUi.text(this, "使用时间管理", if (tv) 15f else 13f, p.text2, true))
         intro.addView(TvUi.text(this, "开启几项权限，\n到时间自动提醒学习", if (tv) 34f else 26f, p.text, true).apply { setLineSpacing(0f, 1.15f) },
             LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(10) })

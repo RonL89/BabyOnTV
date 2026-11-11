@@ -1,8 +1,9 @@
 /* BabyOnTV 学习页样式：深色 / 浅色双主题，电视优先（遥控器焦点导航） */
 * { -webkit-box-sizing: border-box; box-sizing: border-box; }
 
+html, body { width: 100vw; height: 100vh; margin: 0; padding: 0; }
 html { -webkit-text-size-adjust: 100%; }
-body { margin: 0; font-family: "PingFang SC", "Microsoft YaHei", sans-serif; }
+body { font-family: "PingFang SC", "Microsoft YaHei", sans-serif; }
 
 :root {
   --bg: #141414; --panel: #1d1d1f; --panel2: #262628;

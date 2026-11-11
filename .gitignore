@@ -1,3 +1,6 @@
+# 本地构建工具链（JDK / Android SDK / Gradle 等，绝不入库）
+/.tools/
+
 # 构建产物 / 本地环境
 /app/native/build/
 /app/native/app/build/

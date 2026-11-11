@@ -374,8 +374,17 @@ class GateService : Service() {
             .put("lastTickSeconds", if (instance == null) -1 else ((SystemClock.elapsedRealtime() - (instance?.lastTick ?: 0)) / 1000))
             .put("lastError", instance?.lastGateError ?: "")
         fun hideGates() {
-            Handler(Looper.getMainLooper()).post { instance?.overlay?.hide(); WatchAccessibilityService.hideGate() }
+        Handler(Looper.getMainLooper()).post { 
+            instance?.overlay?.hide(); WatchAccessibilityService.hideGate()
+            // 通知前端重置计时器与状态机，防止锁屏页偶发卡死
+            instance?.let { service ->
+                val activity = Foreground.learningActivity()
+                if (activity is MainActivity) {
+                    activity.getWebView()?.evaluateJavascript("window.BOTV_RESET_TIMER && BOTV_RESET_TIMER()", null)
+                }
+            }
         }
+    }
         fun onOwnActivityResumed() {
             instance?.settingsUntil = 0L
             Handler(Looper.getMainLooper()).post {

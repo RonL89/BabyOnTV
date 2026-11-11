@@ -37,6 +37,7 @@ object DeviceRuntime {
         server = LanServer(app, store, app.assets).also {
             it.start()
             Prefs.setLocalPort(app, it.boundPort)
+            LanServer.setInstance(it)
         }
         WebShell.Companion.PrefsHolder.baseUrl = Prefs.localBase(app)
         if (GradingService.settings(store).optString("mode") == "ai") {

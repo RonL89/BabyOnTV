@@ -97,6 +97,7 @@ object TvUi {
         minWidth = 0; minimumWidth = 0; minHeight = dp(context, 48); minimumHeight = dp(context, 48)
         setPadding(dp(context, 26), dp(context, 10), dp(context, 26), dp(context, 10))
         isFocusable = true
+        isFocusableInTouchMode = true
         backgroundTintList = null
         if (tv) {
             background = focusable(context, if (primary) p.surface2 else p.surface, 14)
@@ -107,6 +108,13 @@ object TvUi {
         }
         lift(this, 1.06f)
         setOnClickListener { action() }
+        // TV 遥控器支持：DPAD 中键/Enter 触发点击
+        setOnKeyListener { _, keyCode, event ->
+            if (event.action == android.view.KeyEvent.ACTION_DOWN && (keyCode == android.view.KeyEvent.KEYCODE_DPAD_CENTER || keyCode == android.view.KeyEvent.KEYCODE_ENTER)) {
+                action()
+                true
+            } else false
+        }
     }
 
     fun field(edit: EditText) {
@@ -138,7 +146,7 @@ object TvUi {
         val tv = DeviceBridge.isTv(context)
         val row = LinearLayout(context).apply {
             orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL
-            isFocusable = true; isClickable = true
+            isFocusable = true; isClickable = true; isFocusableInTouchMode = true
             setPadding(dp(context, 22), dp(context, if (tv) 12 else 16), dp(context, 22), dp(context, if (tv) 12 else 16))
             background = focusable(context, p.surface, 16)
             setOnClickListener { action() }
@@ -158,6 +166,13 @@ object TvUi {
         row.addView(status, LinearLayout.LayoutParams(-2, -2).apply { leftMargin = dp(context, 16) })
         row.addView(text(context, "›", if (tv) 26f else 22f).apply { setTextColor(textStates(p.focusText, p.text3)); isDuplicateParentStateEnabled = true },
             LinearLayout.LayoutParams(-2, -2).apply { leftMargin = dp(context, 12) })
+        // TV 遥控器支持：DPAD 中键/Enter 触发点击
+        row.setOnKeyListener { _, keyCode, event ->
+            if (event.action == android.view.KeyEvent.ACTION_DOWN && (keyCode == android.view.KeyEvent.KEYCODE_DPAD_CENTER || keyCode == android.view.KeyEvent.KEYCODE_ENTER)) {
+                action()
+                true
+            } else false
+        }
         // 列表行不放大（放大后会超出滚动区域被裁切），只靠描边标出焦点
         return Row(row, status, icon, context)
     }

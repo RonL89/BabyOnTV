@@ -27,6 +27,12 @@ class LanServer(
     var boundPort: Int = -1
         private set
 
+    companion object {
+        @Volatile private var instance: LanServer? = null
+        fun setInstance(server: LanServer?) { instance = server }
+        fun getBoundPort(): Int = instance?.boundPort ?: 8099
+    }
+
     /** 最大尝试端口数（8099~8118 共 20 个端口） */
     private val maxPortAttempts = 20
 
