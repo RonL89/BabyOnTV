@@ -12,7 +12,7 @@ import android.content.Intent
  */
 class UninstallGuard : DeviceAdminReceiver() {
     override fun onDisableRequested(context: Context, intent: Intent): CharSequence =
-        "关闭后“BabyOnTV”可以被卸载，使用时间管理也会失效。请确认是家长在操作。"
+        "关闭后“宝宝请听题”可以被卸载，使用时间管理也会失效。请确认是家长在操作。"
 
     companion object {
         fun component(context: Context) = ComponentName(context, UninstallGuard::class.java)
@@ -21,6 +21,6 @@ class UninstallGuard : DeviceAdminReceiver() {
         } catch (_: Exception) { false }
         fun requestIntent(context: Context): Intent = Intent(DevicePolicyManager.ACTION_ADD_DEVICE_ADMIN)
             .putExtra(DevicePolicyManager.EXTRA_DEVICE_ADMIN, component(context))
-            .putExtra(DevicePolicyManager.EXTRA_ADD_EXPLANATION, "开启后，孩子无法直接卸载“BabyOnTV”。家长需要先在这里关闭，才能卸载。")
+            .putExtra(DevicePolicyManager.EXTRA_ADD_EXPLANATION, "开启后，孩子无法直接卸载“宝宝请听题”。家长需要先在这里关闭，才能卸载。")
     }
 }

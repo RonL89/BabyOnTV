@@ -1,5 +1,5 @@
 <resources>
     <string name="app_name">宝宝请听题</string>
-    <string name="accessibility_label">BabyOnTV 屏幕时间守护</string>
+    <string name="accessibility_label">宝宝请听题 屏幕时间守护</string>
     <string name="accessibility_desc">到预设学习时间后，在其他应用上方显示学习任务，管控设备使用时长。</string>
 </resources>

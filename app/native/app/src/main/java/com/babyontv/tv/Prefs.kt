@@ -6,8 +6,12 @@ object Prefs {
     private const val FILE = "botv"
     private fun sp(c: Context) = c.getSharedPreferences(FILE, Context.MODE_PRIVATE)
 
-    fun localPort(c: Context): Int = sp(c).getInt("local_port", 8099)
-    fun setLocalPort(c: Context, port: Int) = sp(c).edit().putInt("local_port", port).apply()
+    /** 端口兜底：历史版本在绑定失败时可能写入 -1，导致 localBase 变成非法地址 */
+    fun localPort(c: Context): Int = sp(c).getInt("local_port", 8099).let { if (it in 1024..65535) it else 8099 }
+    fun setLocalPort(c: Context, port: Int) {
+        if (port !in 1024..65535) return
+        sp(c).edit().putInt("local_port", port).apply()
+    }
 
     fun localBase(c: Context): String = "http://127.0.0.1:" + localPort(c) + "/"
 

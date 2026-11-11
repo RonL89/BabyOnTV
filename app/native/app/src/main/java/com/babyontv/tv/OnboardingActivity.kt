@@ -105,11 +105,11 @@ class OnboardingActivity : Activity() {
         // 针对常见品牌给出更具体的自启动引导
         val brand = android.os.Build.MANUFACTURER.lowercase()
         val brandTip = when {
-            brand.contains("tcl") -> "TCL 电视：设置 → 应用 → BabyOnTV → 自启动，开启「允许自启动」"
-            brand.contains("hisense") || brand.contains("vidaa") -> "海信电视：设置 → 应用管理 → BabyOnTV → 权限 → 允许自启动"
-            brand.contains("skyworth") || brand.contains("coocaa") -> "创维 / 酷开：设置 → 应用 → BabyOnTV → 自启动权限，设为允许"
-            brand.contains("xiaomi") || brand.contains("redmi") -> "小米电视：设置 → 应用 → 应用管理 → BabyOnTV → 自启动，开启。注意：小米 HyperOS 建议不授予悬浮窗权限，否则可能被系统强杀"
-            brand.contains("changhong") -> "长虹电视：设置 → 应用管理 → BabyOnTV → 允许后台运行"
+            brand.contains("tcl") -> "TCL 电视：设置 → 应用 → 宝宝请听题 → 自启动，开启「允许自启动」"
+            brand.contains("hisense") || brand.contains("vidaa") -> "海信电视：设置 → 应用管理 → 宝宝请听题 → 权限 → 允许自启动"
+            brand.contains("skyworth") || brand.contains("coocaa") -> "创维 / 酷开：设置 → 应用 → 宝宝请听题 → 自启动权限，设为允许"
+            brand.contains("xiaomi") || brand.contains("redmi") -> "小米电视：设置 → 应用 → 应用管理 → 宝宝请听题 → 自启动，开启。注意：小米 HyperOS 建议不授予悬浮窗权限，否则可能被系统强杀"
+            brand.contains("changhong") -> "长虹电视：设置 → 应用管理 → 宝宝请听题 → 允许后台运行"
             else -> null
         }
         if (brandTip != null) list.addView(TvUi.text(this, brandTip, if (tv) 12f else 11f, p.text3),

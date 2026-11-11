@@ -3,6 +3,8 @@
 
 # 本地工具/临时产物
 /.dsh-vision-router/
+/.build-tmp/
+/.gradle-home/
 
 # 构建产物 / 本地环境
 /app/native/build/

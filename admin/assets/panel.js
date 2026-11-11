@@ -61,7 +61,7 @@
     var remember = el('input', { type: 'checkbox', id: 'remember' });
     var go = function () { login(pass.value, remember.checked); };
     document.body.appendChild(el('div', { class: 'login' }, [
-      el('div', { class: 'brand' }, [el('span', { class: 'logo' }, [el('i')]), 'BabyOnTV']),
+      el('div', { class: 'brand' }, [el('span', { class: 'logo' }, [el('img', { src: './assets/logo.png', alt: '' })]), '宝宝请听题']),
       el('p', { class: 'muted', style: 'text-align:center;margin-bottom:14px' }, ['家长管理']),
       pass, el('label', { class: 'row', style: 'margin:12px 0;font-size:13px;color:var(--text2)' },
         [remember, el('span', {}, ['在这台设备上记住我（30 天）'])]),
@@ -83,7 +83,7 @@
       }, [p[1]]);
     }));
     var side = el('aside', { class: 'side' }, [
-      el('div', { class: 'brand' }, [el('span', { class: 'logo' }, [el('i')]), 'BabyOnTV']),
+      el('div', { class: 'brand' }, [el('span', { class: 'logo' }, [el('img', { src: './assets/logo.png', alt: '' })]), '宝宝请听题']),
       nav,
       el('div', { class: 'foot' }, [
         el('div', {}, [store.device ? store.device.name : '']),

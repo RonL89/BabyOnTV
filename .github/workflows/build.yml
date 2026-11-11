@@ -148,9 +148,9 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: v${{ steps.ver.outputs.version }}
-          name: BabyOnTV v${{ steps.ver.outputs.version }}
+          name: 宝宝请听题 v${{ steps.ver.outputs.version }}
           body: |
-            BabyOnTV 幼儿识字 / 英语 / 书写启蒙（离线语音）
+            宝宝请听题 — 幼儿识字 / 英语 / 书写启蒙（离线语音）
 
             - 题库：识字 100 + 英语 100 + 书写 10，共 210 题
             - 语音：832 个离线 mp3，题干/选项/对错音效全部本地播放，不依赖系统 TTS

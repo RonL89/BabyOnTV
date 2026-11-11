@@ -38,12 +38,18 @@ class LanServer(
 
     fun start() {
         if (running) return
-        boundPort = findAvailablePort(port, maxPortAttempts) ?: return
+        boundPort = bindAvailablePort(port, maxPortAttempts)
+        if (boundPort < 0) {
+            Diag.error("HTTP", "LanServer 无法绑定任何端口 $port~${port + maxPortAttempts - 1}")
+            return
+        }
+        Diag.info("HTTP", "LanServer listening on $boundPort")
         running = true
+        val listen = socket ?: return
         Thread {
             while (running) {
                 try {
-                    val client = socket!!.accept()
+                    val client = listen.accept()
                     pool.execute { handle(client) }
                 } catch (e: Exception) {
                     if (running) Thread.sleep(50)
@@ -57,20 +63,21 @@ class LanServer(
         try { socket?.close() } catch (e: Exception) { }
     }
 
-    /** 从 startPort 开始递增尝试 maxAttempts 个端口，返回首个可用端口 */
-    private fun findAvailablePort(startPort: Int, maxAttempts: Int): Int? {
+    /** 从 startPort 开始递增尝试 maxAttempts 个端口，真正绑定并保留 socket，返回绑定端口；全部失败返回 -1 */
+    private fun bindAvailablePort(startPort: Int, maxAttempts: Int): Int {
         for (i in 0 until maxAttempts) {
-            val p = startPort + i
-            try {
-                ServerSocket(p).use { it.close() }
-                return p
-            } catch (_: Exception) { }
+            tryBind(startPort + i)?.let { return it }
         }
-        return null
+        return -1
     }
 
     private fun tryBind(p: Int): Int? = try {
-        socket = ServerSocket(p)
+        try { socket?.close() } catch (_: Exception) { }
+        socket = null
+        socket = ServerSocket().apply {
+            reuseAddress = true
+            bind(java.net.InetSocketAddress(p), 64)
+        }
         p
     } catch (e: Exception) {
         null
@@ -256,12 +263,16 @@ class LanServer(
             }
             path == "/api/logout" && method == "POST" -> { AdminAuth.forget(context, token); return json(out, 200, JSONObject().put("ok", true)) }
             path == "/api/remote" && method == "POST" -> {
-                // 家长会话，或带「控制」权限的集成令牌；学习页的设备令牌不能调用
+                // 家长会话、带「控制」权限的集成令牌，或本机设备令牌（电视端快捷面板）
                 val parent = AdminAuth.valid(token)
                 val control = IntegrationAuth.verify(context, token)?.control == true
-                if (!parent && !control) return json(out, 403, err("forbidden").put("message", "请先用管理密码登录"))
+                if (!parent && !control && !deviceAccess) return json(out, 403, err("forbidden").put("message", "请先用管理密码登录"))
                 val input = JSONObject(body.ifEmpty { "{}" })
-                val status = DeviceRuntime.learning.remote(input.optString("action"), input.optInt("minutes"), if (parent) "panel" else "integration")
+                val status = DeviceRuntime.learning.remote(input.optString("action"), input.optInt("minutes"), when {
+                    parent -> "panel"
+                    control -> "integration"
+                    else -> "tv_quick_panel"
+                })
                 GateService.refreshNow()
                 return json(out, 200, JSONObject().put("learning", status))
             }
