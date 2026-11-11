@@ -77,6 +77,27 @@ scripts/         语音生成、截图、更新清单脚本
   gradle :app:assembleTvRelease :app:assembleMobileRelease
   ```
 
+## 版本历史
+
+### v1.0.6 (2026-11-11) — 图标、名称与遥控器全键位支持
+- **新增**：应用图标替换为熊抱电视插画（全套 mipmap 密度 48/72/96/144/192px）
+- **新增**：应用名称改为「宝宝请听题」
+- **修复**：电视端遥控器全键位可操作 — 所有按钮、权限列表行新增 DPAD_CENTER/Enter 键监听，修复 OnboardingActivity 权限引导页「去开启」按钮无法用遥控器选中、ParentActivity 密码验证页按钮遥控器不可用问题
+- **构建**：TV / Mobile release APK 编译通过（9.1 MB），无新增 lint 错误
+
+### v1.0.4 (2026-11-10) — 电视实测 3 个严重 Bug 修复
+- **修复**：答题时没有读题目 — 调整 JS 桥接注入时序，`addJavascriptInterface` 先于 `loadUrl`，语音播报 100% 就绪
+- **修复**：答题界面只占屏幕左上角 — `MainActivity.onCreate` 新增沉浸式全屏标志，TV / Mobile 均生效
+- **修复**：家长控制二维码无法扫描 — `DeviceBridge.lanInfo()` 移除 `connectionAllowed` 守卫，配对页可直接获取局域网地址
+
+### v1.0.3 (2026-11-10) — 正式发版签名
+- 启用 release keystore 签名（替代 v1.0.2 的 debug 签名）
+- GitHub Actions 自动发布 Release，产物含 SHA256 校验文件
+
+### v1.0.2 (2026-11-10) — 初始公开版本
+- 完整功能：识字/英语/书写 210 题、832 条离线语音、SM-2 间隔复习、家长面板、局域网配对
+- 包名：电视 `com.babyontv.tv`，手机/平板 `com.babyontv.mobile`
+
 ## 许可
 
 - 本项目代码以 [LICENSE](LICENSE)（自有版权）发布：个人免费使用，禁止商用与再分发。
