@@ -39,3 +39,6 @@ BabyOnTV-*.apk
 
 # 会话记忆（个人）
 /.memsearch/
+
+# 临时草稿（截图、交接文档等）
+/.scratch/
