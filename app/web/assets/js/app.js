@@ -79,12 +79,16 @@
   function playAudio(name) { if (name) try { nativeCall('playAudio', [name]); } catch (e) {} }
   function stopAudio() { try { nativeCall('stopAudio'); } catch (e) {} }
   function qid(item) { var id = item && item.id ? String(item.id) : ''; return /^q_\d+$/.test(id) ? id : ''; }
+  // 题目自动朗读开关（面板「界面」卡片里的 ttsEnabled）；关闭后整段静音
+  function ttsOn() { return !!(state.config && state.config.ttsEnabled); }
   function speakQuestion(item) {
+    if (!ttsOn()) return;
     var id = qid(item);
     if (id) playAudio(id + '.mp3');
-    else if (isTv() && window.localStorage.getItem('botv_tts') === '1') nativeCall('readAloud', [item.q]);
+    else if (isTv()) nativeCall('readAloud', [item.q]);   // 没有离线音频时的系统 TTS 兜底
   }
   function speakOption(index) {
+    if (!ttsOn() || index < 0) return;
     var id = qid(state.round && state.round.question);
     if (id) playAudio(id + '_opt_' + index + '.mp3');
   }
@@ -126,12 +130,17 @@
         focusDefault(); return;
       }
       state.round = result;
+      // 轮询会因 override / free / config.version 变化反复调 start()；
+      // 若服务器返回的还是屏幕上这道题，就只更新顶部状态，不重画、不重播语音。
+      if (state.screen === 'quiz' && !state.feedback && state.shownRound === result.id + ':' + result.nonce) return;
       show('quiz'); renderQuestion();
     });
   }
 
   function renderQuestion() {
     var round = state.round, item = round.question;
+    // 记住屏幕上正在显示的这道题，轮询 start() 拿到同一题时不再重画重播
+    state.shownRound = round.id + ':' + round.nonce;
     if (window._pendingInput) { state.draft = { nonce: round.nonce, text: window._pendingInput.text || '', drawing: window._pendingInput.drawing || '' }; window._pendingInput = null; }
     else if (!state.draft || state.draft.nonce !== round.nonce) state.draft = { nonce: round.nonce, text: '', drawing: '' };
     state.selected = [];
@@ -143,6 +152,8 @@
     $('qDots').textContent = round.mode === 'streak' ? '连续答对 ' + round.streak + ' 题' : '';
     var qLength = (item.q || '').length;
     $('qText').className = 'question' + (qLength > 120 ? ' longer' : qLength > 56 ? ' long' : '');
+    // 全屏题目模式：在电视上启用
+    if (isTv()) $('qWrap').classList.add('fullscreen');
     speakQuestion(item);
     var options = $('qOptions'); options.innerHTML = '';
     var longest = 0;
@@ -332,6 +343,11 @@
     var url = 'http://' + info.ip + ':' + info.port + '/admin/';
     $('pairUrl').textContent = url;
     $('pairQr').innerHTML = window.qrcode(0, 'M').addData(url).make().createImgTag(6, 2);
+    // 电视上没有浏览器，权限与设置只能走原生入口
+    var acts = $('pairActions');
+    if (acts) acts.innerHTML = isTv()
+      ? '<button class="btn btn-ghost focusable" data-action="permissions">权限与设置</button>'
+      : '';
     focusDefault();
   }
   // 深色 / 浅色 / 跟随系统
@@ -362,20 +378,28 @@
     if ($('updateTip').className.indexOf('show') >= 0) list = list.concat(all('#updateTip .focusable'));
     return list.filter(function (el) { return el.offsetWidth > 0 || el.offsetHeight > 0; });
   }
+  // 真正在滚动的是 .screen（body 是 overflow:hidden），滚 window 是空操作
+  function scrollHost() { return document.querySelector('.screen.active') || document.documentElement; }
   function reveal(el) {
-    // 旧版电视 WebView 不支持 scrollIntoView 参数，手动滚动到可见
-    var r = el.getBoundingClientRect(), h = window.innerHeight || document.documentElement.clientHeight;
-    if (r.top < 0) window.scrollBy(0, r.top - 24); else if (r.bottom > h) window.scrollBy(0, r.bottom - h + 24);
+    var host = scrollHost(), r = el.getBoundingClientRect();
+    var top = host === document.documentElement ? 0 : host.getBoundingClientRect().top;
+    var bottom = top + host.clientHeight;
+    if (r.top < top + 8) host.scrollTop += r.top - top - 8;
+    else if (r.bottom > bottom - 8) host.scrollTop += r.bottom - bottom + 8;
   }
-  function setFocus(index) {
+  // silent=true：只移动焦点不朗读（题干音刚入队，避免选项音抢在它前面）
+  function setFocus(index, silent) {
     var list = focusables();
     all('.focused').forEach(function (el) { el.classList.remove('focused'); });
-    if (list[index]) { list[index].classList.add('focused'); reveal(list[index]); state.focusKey = list[index].getAttribute('data-opt') || ''; 
+    if (list[index]) {
+      list[index].classList.add('focused');
+      reveal(list[index]);
+      state.focusKey = list[index].getAttribute('data-opt') || '';
       var idx = list[index].getAttribute('data-opt');
-      if (idx !== null && state.screen === 'quiz') speakOption(+idx);
+      if (!silent && idx !== null && state.screen === 'quiz') speakOption(+idx);
     }
   }
-  function focusDefault() { if (isTv()) setFocus(0); }
+  function focusDefault() { if (isTv()) setFocus(0, true); }
   // 返回 true 表示焦点移动了；false 表示已到边缘（原生层据此判断「在最上方连按 ↑」打开家长入口）
   function move(dir) {
     var list = focusables(), index = -1, best = -1, score = 1e12;
@@ -426,7 +450,7 @@
   }
   function route() {
     hideAllTimers();
-    window.clearTimeout(nextTimer); state.busy = false; hideFeedback();
+    window.clearTimeout(nextTimer); state.busy = false; state.shownRound = ''; hideFeedback();
     var hash = location.hash || '#/quiz';
     state.settingsGate = hash.indexOf('reason=settings') >= 0;
     if (hash.indexOf('#/pair') === 0) return pair();
@@ -484,8 +508,12 @@
           window.clearTimeout(nextTimer); state.busy = false; state.awaiting = false; state.reviewed = false;
           hideFeedback(); start(); return;
         }
-        var ovKey = state.learning.override ? state.learning.override.mode + state.learning.override.at : '';
-        if (ovKey !== (state.ovKey || '')) {
+        var ov = state.learning.override;
+        // 用「模式 + 到期时刻」做键：at 是写入时的墙上时间戳，只在新指令时变化；
+        // remainingSeconds 每秒在变，绝不能进键，否则每 2 秒会重建一整局。
+        var ovKey = ov ? ov.mode + '@' + (ov.until || ov.at || 0) : '';
+        if (!state.ovSynced) { state.ovSynced = true; state.ovKey = ovKey; }
+        else if (ovKey !== state.ovKey) {
           state.ovKey = ovKey;
           window.clearTimeout(nextTimer); state.busy = false; state.awaiting = false; state.reviewed = false;
           hideFeedback(); start(); return;

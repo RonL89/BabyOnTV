@@ -42,3 +42,4 @@ BabyOnTV-*.apk
 
 # 临时草稿（截图、交接文档等）
 /.scratch/
+/full_diff.txt

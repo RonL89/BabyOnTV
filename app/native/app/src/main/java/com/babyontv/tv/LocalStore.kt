@@ -110,6 +110,7 @@ class LocalStore(context: Context) : SQLiteOpenHelper(context, "babyontv.db", nu
             .put("difficultyRewards", JSONObject().put("1", 1).put("2", 2).put("3", 3).put("4", 4).put("5", 5))
             .put("praisePhrases", JSONArray(DEFAULT_PRAISE)).put("encouragePhrases", JSONArray(DEFAULT_ENCOURAGE))
             .put("autoNextSeconds", 0).put("scheduleMode", "allow").put("blockSettingsDuringControl", true).put("theme", if (BuildConfig.FLAVOR == "tv") "dark" else "system")
+            .put("ttsEnabled", true)
             .put("holidayMode", "sunday")
             .put("countLauncherAsUsage", isVidaa())
             .put("quizSubjects", JSONArray()).put("quizLevels", JSONArray())
@@ -191,7 +192,7 @@ class LocalStore(context: Context) : SQLiteOpenHelper(context, "babyontv.db", nu
             require(input.getString("playMode") in listOf("round", "streak", "practice")) { "未知玩法" }
             next.put("playMode", input.getString("playMode"))
         }
-        listOf("extraEnabled", "difficultyRewardEnabled", "allDay", "spacedRepetitionEnabled", "blockSettingsDuringControl", "countLauncherAsUsage").forEach {
+        listOf("extraEnabled", "difficultyRewardEnabled", "allDay", "spacedRepetitionEnabled", "blockSettingsDuringControl", "countLauncherAsUsage", "ttsEnabled").forEach {
             if (input.has(it)) next.put(it, input.getBoolean(it))
         }
         for (key in listOf("praisePhrases", "encouragePhrases")) if (input.has(key)) {

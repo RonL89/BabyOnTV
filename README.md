@@ -58,8 +58,8 @@ scripts/         语音生成、截图、更新清单脚本
 
 ## 家长面板与权限
 
-- 电视上：品牌位连点 5 次，或在最上方连按 `↑` 5 次 → 家长验证。
-- 手机 / 平板：点右上角「家长」，或长按题干。
+- 电视上：品牌位连点 5 次，或在最上方连按 `↑` 5 次 → 家长验证；长按屏幕顶部区域或按 `MENU` → 家长快捷面板。
+- 手机 / 平板：点右上角「家长」进入验证。
 - 手机扫码/浏览器打开 `http://<设备IP>:8099/admin/`，输入管理密码。
 - 权限（可选，但管控生效需要）：悬浮窗、使用情况访问、无障碍、后台运行/自启动。
   ADB 一条龙脚本见 [LLM.md](LLM.md)。
@@ -67,7 +67,7 @@ scripts/         语音生成、截图、更新清单脚本
 ## 构建与发版
 
 - 本仓库通过 GitHub Actions 构建（`.github/workflows/build.yml`）：
-  - 版本：`1.0.<run>`；`versionCode = 10000 + run`
+  - 版本：tag > 仓库根 `version.txt` > `1.0.<run>`；`versionCode = 10000 + run`（单调递增，保证覆盖安装生效）
   - 签名：GitHub Secrets `KEYSTORE_BASE64 / KEYSTORE_PASS / KEY_ALIAS / KEY_PASS`
   - 产物：`BabyOnTV-TV-v*.apk`、`BabyOnTV-Mobile-v*.apk`、`SHA256SUMS.txt`，自动发布 Release
 - 本地构建需要 JDK 17 + Android SDK 36 + Gradle 8.14.x：
@@ -79,7 +79,20 @@ scripts/         语音生成、截图、更新清单脚本
 
 ## 版本历史
 
-### v1.0.9 (2026-11-12) — 家长面板 UI 重设计
+### v1.1.0 (2026-11-13) — 电视实测 7 项问题修复（全屏 / 读题 / 遥控器 / 刷新 / 导出 / 权限入口）
+
+> 上一版申报的修复只留在工作区、从未进过设备；本版重新实现并全部打包验证。
+
+- **修复「题目只显示左上角」**：`.screen` 不再用 `inset` 简写（老电视 WebView 不认，整屏塌成左上角一小块），改 `top/right/bottom/left:0`；`.screen` 成为唯一滚动容器并自带顶栏留白，`body{padding-top}` 对 fixed 子元素无效的问题一并消除；答题/锁定/配对页统一 flex 纵向居中
+- **修复「出题不读题」**：`AudioPlayer` 改为串行播放队列——题干音与反馈音优先并清空积压，选项音排队等题干播完，不再出现「后一条请求把题干音当场掐掉」；首次落焦不抢读，遥控器移动焦点才播报选项
+- **修复「答题页不停刷新」**：轮询比对键从 `mode+at`（毫秒时间戳）改为 `mode+until`，并加首轮基线；同一道题（id+nonce 未变）不再重画、不再重播语音；`onNewIntent` 同页不再二次 loadUrl
+- **修复「日志无法导出」**：`Diag.export()` 全程容错（单个文件失败不再产出半截 zip）并新增人可读 `report.txt`；电视 WebView 里下载走原生 `downloadFile` 桥落盘；`/api/logs/export` 支持 `?token=`
+- **修复「Broken pipe 刷屏」**：客户端断开不再记 ERROR；同类日志 10 秒折叠；`handle()` 空 catch 改为真实异常留痕；线程池改可伸缩
+- **修复「权限开关遥控器不能操作」**：新增电视端原生「权限与设置」页（`SettingsActivity`），遥控器上下选中、确定直达系统设置页；跳转逻辑统一收敛到 `PermissionIntents`（多厂商 Intent 回退链）；家长连接页与配对页均补原生入口；面板权限矩阵改走原生桥，手机浏览器打开时给出明确指引
+- **新增「题目自动朗读」真实开关**：`ttsEnabled` 此前不在 `saveConfig` 白名单里，保存即丢弃；现已入默认值与白名单，学习语音频按开关生效
+- **面板遥控器可用**：新增焦点导航引擎（方向键移动、OK/空格确认、Esc 关闭对话框），异步渲染后自动重扫；`switchRow`、导航、按钮、对话框均加 `focusable`
+- **收窄误触**：长按唤出家长快捷面板仅限屏幕顶部 12% 区域，孩子在选项上按住不再弹出
+- **工程**：`/api/device` 补 `arch`/WebView 版本（关于页不再显示「—」）；`version.txt` 钉版本号（tag > version.txt > 1.0.<run>）；`node --check` + `panel-smoke` 9/9 + `testTvDebugUnitTest` 全绿
 
 > 只改 `admin/` 前端与本地调试脚本，未动 Kotlin、接口与数据格式；已发布签名包的 `assets/admin/` 与仓库文件逐字节一致。
 

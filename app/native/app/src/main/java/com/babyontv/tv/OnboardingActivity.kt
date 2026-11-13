@@ -3,10 +3,8 @@ package com.babyontv.tv
 import android.app.Activity
 import android.content.Intent
 import android.graphics.drawable.GradientDrawable
-import android.net.Uri
 import android.os.Build
 import android.os.Bundle
-import android.provider.Settings
 import android.view.Gravity
 import android.view.View
 import android.widget.LinearLayout
@@ -77,23 +75,19 @@ class OnboardingActivity : Activity() {
         }
         list.addView(TvUi.text(this, "权限", if (tv) 14f else 13f, p.text3, true), LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dp(10); leftMargin = dp(4) })
         add(android.R.drawable.ic_menu_view, "悬浮窗", "到时间后在其他应用上方显示学习页", false, { GateOverlay.canDraw(this) }) {
-            openSettings(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, true)
+            PermissionIntents.openOverlay(this)
         }
         add(android.R.drawable.ic_menu_manage, "无障碍服务", if (tv) "及时识别应用切换，部分电视不支持" else "及时识别应用切换", true, { WatchAccessibilityService.connected }) {
-            openSettings(Settings.ACTION_ACCESSIBILITY_SETTINGS)
+            PermissionIntents.openAccessibility(this)
         }
         add(android.R.drawable.ic_menu_recent_history, "使用情况访问", "只统计其他应用的使用时长", true, { Foreground.hasUsageAccess(this) }) {
-            openSettings(Settings.ACTION_USAGE_ACCESS_SETTINGS)
+            PermissionIntents.openUsageAccess(this)
         }
         add(android.R.drawable.ic_lock_idle_alarm, "后台运行", "关闭电池优化，减少被系统清理", true, { Build.VERSION.SDK_INT < 23 || ignoringBattery() }) {
-            if (Build.VERSION.SDK_INT >= 23 && !ignoringBattery()) openSettings(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS, true, Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS)
-            else openSettings(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, true)
+            PermissionIntents.openBatteryExemption(this)
         }
         add(android.R.drawable.ic_lock_lock, "防卸载", "孩子无法直接删除应用，家长可随时关闭", true, { UninstallGuard.active(this) }) {
-            if (UninstallGuard.active(this)) openSettings(Settings.ACTION_SECURITY_SETTINGS)
-            else try { GateService.openingSystemPage(parentAuthorized = true); startActivity(UninstallGuard.requestIntent(this)) } catch (_: Exception) {
-                Toast.makeText(this, "这台设备不支持设备管理应用，无法开启防卸载", Toast.LENGTH_LONG).show()
-            }
+            PermissionIntents.openDeviceAdmin(this)
         }
         // 电视一般不显示通知，只在手机 / 平板上提示
         if (!tv && Build.VERSION.SDK_INT >= 33) add(android.R.drawable.ic_dialog_info, "通知", "显示“使用时间管理中”的常驻通知", true,
@@ -147,17 +141,6 @@ class OnboardingActivity : Activity() {
         return try {
             (getSystemService(POWER_SERVICE) as android.os.PowerManager).isIgnoringBatteryOptimizations(packageName)
         } catch (_: Exception) { false }
-    }
-
-    private fun openSettings(action: String, packageSpecific: Boolean = false, fallback: String? = null) {
-        GateService.openingSystemPage(parentAuthorized = true)
-        val options = mutableListOf(Intent(action).apply { if (packageSpecific) data = Uri.parse("package:$packageName") })
-        if (packageSpecific) options.add(Intent(action))
-        if (fallback != null) options.add(Intent(fallback))
-        options.add(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:$packageName")))
-        options.add(Intent(Settings.ACTION_SETTINGS))
-        for (intent in options) try { startActivity(intent); return } catch (_: Exception) { }
-        Toast.makeText(this, "请在系统设置中调整权限", Toast.LENGTH_SHORT).show()
     }
 
     private fun complete(manage: Boolean) {

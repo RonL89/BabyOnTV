@@ -9,12 +9,16 @@ import android.webkit.WebView
 class ParentActivity : Activity() {
     private var verified = false
     private var web: WebView? = null
+    private val tv get() = DeviceBridge.isTv(this)
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         DeviceRuntime.ensure(this)
-        if (AdminAuth.configured(this) && AdminAuth.recentlyVerified()) { verified = true; connection() }
-        else form(!AdminAuth.configured(this))
+        if (AdminAuth.configured(this) && AdminAuth.recentlyVerified()) {
+            verified = true
+            // 从「权限与设置」页过来时直接进管理面板
+            if (intent.getBooleanExtra("openAdmin", false)) adminPanel() else connection()
+        } else form(!AdminAuth.configured(this))
     }
 
     private fun dp(value: Int): Int = (value * resources.displayMetrics.density).toInt()
@@ -95,6 +99,13 @@ class ParentActivity : Activity() {
         if (!setup || changing) column.addView(TvUi.button(this, if (changing) "取消" else "返回答题") {
             if (changing) connection() else { startActivity(Intent(this, MainActivity::class.java)); finish() }
         }, android.widget.LinearLayout.LayoutParams(-1, dp(52)).apply { topMargin = dp(12) })
+        // 电视端：原生入口进入「权限与设置」与「打开管理面板」
+        if (tv) {
+            column.addView(TvUi.button(this, "权限与设置") { startActivity(Intent(this, SettingsActivity::class.java)) },
+                android.widget.LinearLayout.LayoutParams(-1, dp(52)).apply { topMargin = dp(12) })
+            column.addView(TvUi.button(this, "打开管理面板") { adminPanel() },
+                android.widget.LinearLayout.LayoutParams(-1, dp(52)).apply { topMargin = dp(12) })
+        }
         if (setup && !changing) column.addView(text(if (tv) "之后在学习页最上方连续短按遥控器 ↑ 5 次，可重新打开此入口。" else "之后在学习页连续点击左上角标题 5 次，可重新打开此入口。", 14f, TvUi.muted(this)))
         setContentView(android.widget.ScrollView(this).apply { isFillViewport = true; setBackgroundColor(TvUi.background(this@ParentActivity)); addView(content) })
         secret.requestFocus()
@@ -103,8 +114,21 @@ class ParentActivity : Activity() {
     private fun connection() {
         // 权限设置 / 修改密码 / 返回答题都放在网页里，方便遥控器在同一个页面里移动焦点
         currentFocus?.let { (getSystemService(INPUT_METHOD_SERVICE) as android.view.inputmethod.InputMethodManager).hideSoftInputFromWindow(it.windowToken, 0) }
+        showPage(Prefs.localBase(this) + "#/pair")
+    }
+
+    /**
+     * 电视端直接在 WebView 里打开家长管理面板（/admin/ 与学习页同源，WebShell 放行）。
+     * 面板自带遥控器焦点导航；登录需要输入管理密码，遥控器可呼出系统输入法。
+     */
+    private fun adminPanel() {
+        showPage(Prefs.localBase(this) + "admin/")
+    }
+
+    private fun showPage(url: String) {
+        currentFocus?.let { (getSystemService(INPUT_METHOD_SERVICE) as android.view.inputmethod.InputMethodManager).hideSoftInputFromWindow(it.windowToken, 0) }
         web?.destroy()
-        web = WebShell(this).create(Prefs.localBase(this) + "#/pair").also {
+        web = WebShell(this).create(url).also {
             it.addJavascriptInterface(DeviceBridge(this, true, it), "BOTVNative")
         }
         setContentView(web)

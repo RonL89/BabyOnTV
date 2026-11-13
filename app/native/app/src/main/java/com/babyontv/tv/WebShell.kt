@@ -3,6 +3,7 @@ package com.babyontv.tv
 import android.annotation.SuppressLint
 import android.content.Context
 import android.view.KeyEvent
+import android.webkit.DownloadListener
 import android.webkit.WebChromeClient
 import android.webkit.WebSettings
 import android.webkit.WebView
@@ -35,7 +36,7 @@ class WebShell(private val context: Context) {
         s.useWideViewPort = false
         s.loadWithOverviewMode = false
         web.setInitialScale(100)
-        s.userAgentString = s.userAgentString + " BabyOnTV/${BuildConfig.VERSION_NAME} (Android)"
+        s.userAgentString = s.userAgentString + " BabyOnTV/" + BuildConfig.VERSION_NAME + " (Android)"
 
         web.webViewClient = object : WebViewClient() {
             override fun shouldOverrideUrlLoading(view: WebView?, url: String?): Boolean {
@@ -43,6 +44,21 @@ class WebShell(private val context: Context) {
             }
         }
         web.webChromeClient = WebChromeClient()
+
+        // 支持 /api/logs/export 的文件下载
+        web.setDownloadListener(object : DownloadListener {
+            override fun onDownloadStart(url: String, userAgent: String, contentDisposition: String, mimetype: String, contentLength: Long) {
+                try {
+                    val intent = android.content.Intent(android.content.Intent.ACTION_VIEW)
+                    intent.data = android.net.Uri.parse(url)
+                    intent.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+                    context.startActivity(intent)
+                } catch (e: Throwable) {
+                    com.babyontv.tv.Diag.error("WebShell.download", "download failed", e)
+                }
+            }
+        })
+
         web.loadUrl(url)
         return web
     }
@@ -79,7 +95,7 @@ class WebShell(private val context: Context) {
 
         /** 仅配置 WebView settings，不执行 loadUrl —— 供桥接先注入场景使用 */
         @SuppressLint("SetJavaScriptEnabled")
-        fun configureSettings(web: WebView) {
+        fun configureSettings(web: WebView, context: Context) {
             web.setBackgroundColor(android.graphics.Color.parseColor("#141414"))
             web.isFocusable = true
             web.isFocusableInTouchMode = true
@@ -99,7 +115,7 @@ class WebShell(private val context: Context) {
             s.useWideViewPort = false
             s.loadWithOverviewMode = false
             web.setInitialScale(100)
-            s.userAgentString = s.userAgentString + " BabyOnTV/${BuildConfig.VERSION_NAME} (Android)"
+            s.userAgentString = s.userAgentString + " BabyOnTV/" + BuildConfig.VERSION_NAME + " (Android)"
 
             web.webViewClient = object : WebViewClient() {
                 override fun shouldOverrideUrlLoading(view: WebView?, url: String?): Boolean {
@@ -107,6 +123,20 @@ class WebShell(private val context: Context) {
                 }
             }
             web.webChromeClient = WebChromeClient()
+
+            // 支持 /api/logs/export 的文件下载
+            web.setDownloadListener(object : DownloadListener {
+                override fun onDownloadStart(url: String, userAgent: String, contentDisposition: String, mimetype: String, contentLength: Long) {
+                    try {
+                        val intent = android.content.Intent(android.content.Intent.ACTION_VIEW)
+                        intent.data = android.net.Uri.parse(url)
+                        intent.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+                        context.startActivity(intent)
+                    } catch (e: Throwable) {
+                        com.babyontv.tv.Diag.error("WebShell.download", "download failed", e)
+                    }
+                }
+            })
         }
 
         object PrefsHolder {

@@ -24,11 +24,11 @@ body {
 }
 
 /* 背景柔光 */
-.bg { position: fixed; inset: 0; pointer-events: none; }
+.bg { position: fixed; top: 0; right: 0; bottom: 0; left: 0; pointer-events: none; }
 .glow { position: absolute; border-radius: 50%; filter: blur(90px); opacity: .18; }
 .glow-a { width: 46vw; height: 46vw; background: var(--accent); top: -18vw; left: -10vw; }
 .glow-b { width: 40vw; height: 40vw; background: #5c7cfa; bottom: -16vw; right: -8vw; opacity: .12; }
-.grain { position: absolute; inset: 0; opacity: .04; background-image: radial-gradient(circle at 1px 1px, var(--text) 1px, transparent 0); background-size: 22px 22px; }
+.grain { position: absolute; top: 0; right: 0; bottom: 0; left: 0; opacity: .04; background-image: radial-gradient(circle at 1px 1px, var(--text) 1px, transparent 0); background-size: 22px 22px; }
 
 /* 顶栏 */
 .topbar {
@@ -56,13 +56,35 @@ body {
 }
 .clock { font-variant-numeric: tabular-nums; color: var(--text3); font-size: 1.15vw; }
 
-/* 屏幕切换 */
-.screen { display: none; position: fixed; inset: 0; z-index: 1; overflow: auto; }
+/* 屏幕切换
+ * 只有 .screen 是滚动容器，body 保持 overflow:hidden。
+ * 不能用 inset 简写：老电视 WebView（<87）不认，会让整屏塌成左上角一小块，
+ * 题目和选项就只出现在左上角、怎么都滚不到中间——这就是「没有全屏」的根因。
+ * 顶栏高度交给 .screen 自己的 padding-top，因为 body 的 padding 对 fixed 子元素无效。
+ */
+.screen {
+  display: none; position: fixed; top: 0; right: 0; bottom: 0; left: 0;
+  z-index: 1; overflow-x: hidden; overflow-y: auto;
+  padding: 9vh 0 3vh; -webkit-overflow-scrolling: touch;
+}
 .screen.active { display: block; }
-body { padding-top: 8vh; }
 
 /* 答题 */
-.quiz-wrap { max-width: 62vw; margin: 0 auto; padding: 1vh 0 4vh; }
+.quiz-wrap {
+  width: 100%; max-width: 76vw; min-height: 84vh; margin: 0 auto; padding: 0 0 4vh;
+  display: flex; flex-direction: column; justify-content: center;
+}
+.quiz-wrap.fullscreen {
+  max-width: 100vw; min-height: 84vh; margin: 0; padding: 0 4vw 4vh;
+  display: flex; flex-direction: column; justify-content: center;
+}
+.quiz-wrap.fullscreen .qcard { border-radius: 0; box-shadow: none; background: transparent; padding: 0; }
+.quiz-wrap.fullscreen .question { font-size: 3.5vw; line-height: 1.5; font-weight: 700; text-align: center; max-width: 90vw; margin: 4vh auto 3vh; }
+.quiz-wrap.fullscreen .q-meta { display: none; }
+.quiz-wrap.fullscreen .options { grid-template-columns: 1fr; gap: 2vh; max-width: 80vw; margin: 0 auto; }
+.quiz-wrap.fullscreen .option { font-size: 2.2vw; padding: 3vh 3vw; border-radius: 1.2vw; justify-content: center; }
+.quiz-wrap.fullscreen .option .letter { width: 3.5vw; height: 3.5vw; min-width: 44px; min-height: 44px; font-size: 1.6vw; }
+
 .quiz-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 2vh; }
 .crumb-main { font-size: 1.2vw; color: var(--text2); }
 .counter b { font-size: 1.6vw; } .counter i { font-style: normal; color: var(--text3); font-size: 1.2vw; }
@@ -105,6 +127,12 @@ body { padding-top: 8vh; }
   border-color: var(--accent) !important;
   box-shadow: 0 0 0 .22vw rgba(255,138,61,.35);
   transform: scale(1.03);
+  z-index: 10;
+}
+.quiz-wrap.fullscreen .option.focused {
+  transform: scale(1.05);
+  box-shadow: 0 0 0 .3vw rgba(255,138,61,.5), 0 .8vh 3vh rgba(0,0,0,.3);
+  background: var(--panel);
 }
 
 .btn {
@@ -150,7 +178,7 @@ body { padding-top: 8vh; }
 #fbNext { flex: none; }
 
 /* 锁定 / 完成页 */
-.lock-wrap { min-height: 80vh; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; padding: 4vh 6vw; }
+.lock-wrap { min-height: 82vh; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; padding: 4vh 6vw; }
 .lock-badge {
   width: 7vw; height: 7vw; min-width: 72px; min-height: 72px; border-radius: 24%;
   background: var(--panel); display: flex; align-items: center; justify-content: center; margin-bottom: 3vh;
@@ -162,7 +190,7 @@ body { padding-top: 8vh; }
 .lock-note { color: var(--text3); font-size: 1.1vw; margin-top: 3vh; }
 
 /* 配对页 */
-.pair-wrap { min-height: 80vh; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; padding: 4vh 6vw; }
+.pair-wrap { min-height: 82vh; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; padding: 4vh 6vw; }
 .pair-title { font-size: 2vw; margin: 0 0 3vh; }
 .pair-qr { background: #fff; padding: 1vw; border-radius: 1vw; min-width: 16vw; min-height: 16vw; }
 .pair-qr img { display: block; width: 14vw; height: 14vw; min-width: 160px; min-height: 160px; }
@@ -194,10 +222,16 @@ body { padding-top: 8vh; }
 
 /* 手机 / 平板 */
 @media (max-width: 900px) {
-  body { padding-top: 64px; font-size: 15px; }
+  .screen { padding: 64px 0 0; }
+  .quiz-wrap { min-height: 70vh; }
+  .quiz-wrap.fullscreen { min-height: 70vh; }
+  .lock-wrap, .pair-wrap { min-height: 72vh; }
   .brand-text, .crumb-main { font-size: 15px; }
   .pill, .clock { font-size: 13px; }
-  .quiz-wrap { max-width: 680px; padding: 12px 16px 60px; }
+  .quiz-wrap {
+    max-width: 100%; padding: 12px 16px 60px;
+    display: block;
+  }
   .qcard { padding: 20px 18px; border-radius: 16px; }
   .question, .question.long, .question.longer { font-size: 20px; }
   .q-meta, .crumb-main { font-size: 13px; }

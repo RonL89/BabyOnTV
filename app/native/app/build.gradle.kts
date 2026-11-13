@@ -94,3 +94,8 @@ val syncWebAssets by tasks.registering(Sync::class) {
 }
 
 tasks.named("preBuild") { dependsOn(syncWebAssets) }
+
+
+dependencies {
+    testImplementation("junit:junit:4.13.2")
+}

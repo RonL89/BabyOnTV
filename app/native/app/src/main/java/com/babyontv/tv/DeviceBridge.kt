@@ -56,7 +56,44 @@ open class DeviceBridge(protected val activity: Activity, private val connection
     @JavascriptInterface
     fun openPermissions() {
         if (!connectionAllowed) return
-        activity.runOnUiThread { activity.startActivity(Intent(activity, OnboardingActivity::class.java)) }
+        activity.runOnUiThread { activity.startActivity(Intent(activity, SettingsActivity::class.java)) }
+    }
+
+    /**
+     * 面板里的权限项点击：跳到对应的系统设置页。
+     * 只有电视本机 WebView 打开面板时才有这座桥；手机浏览器打开面板时不存在，
+     * 由前端退化成提示「请在电视上打开权限与设置」。
+     */
+    @JavascriptInterface
+    fun openSettings(key: String) {
+        if (!connectionAllowed) return
+        activity.runOnUiThread { PermissionIntents.openByKey(activity, key) }
+    }
+
+    /**
+     * 电视 WebView 里保存导出文件：fetch→blob→<a download> 在老电视内核里会被拦掉，
+     * 直接原生下载并写入「下载」目录，返回绝对路径给前端提示。
+     */
+    @JavascriptInterface
+    fun downloadFile(url: String): String {
+        if (!connectionAllowed) return ""
+        if (!url.startsWith(Prefs.localBase(activity))) return ""
+        return try {
+            val conn = URL(url).openConnection() as HttpURLConnection
+            conn.connectTimeout = 5000
+            conn.readTimeout = 60000
+            val bytes = conn.inputStream.use { it.readBytes() }
+            conn.disconnect()
+            val dir = activity.getExternalFilesDir(android.os.Environment.DIRECTORY_DOWNLOADS) ?: activity.filesDir
+            val name = url.substringAfterLast("/").substringBefore("?").ifEmpty { "babyontv-export.zip" }
+            val file = java.io.File(dir, name)
+            file.writeBytes(bytes)
+            Diag.info("UI", "downloadFile ok size=" + bytes.size + " path=" + file.absolutePath)
+            file.absolutePath
+        } catch (ex: Exception) {
+            Diag.error("UI", "downloadFile failed", ex)
+            ""
+        }
     }
 
     /** 网页在 HTTP 局域网环境下拿不到 Clipboard API，交给原生写剪贴板最稳 */

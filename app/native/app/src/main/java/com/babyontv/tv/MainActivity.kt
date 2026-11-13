@@ -48,14 +48,19 @@ open class MainActivity : Activity() {
         createWeb()
         GateService.start(this)
         
-        // 监听品牌区长按 (仅 TV 端)
+        // 监听品牌区长按 (仅 TV 端)：只有按在屏幕顶部 12% 以内才算，
+        // 否则孩子在选项上按住不动就会把家长面板怼出来。
         if (DeviceBridge.isTv(this)) {
             web.setOnTouchListener { _, event ->
-                if (event.action == android.view.MotionEvent.ACTION_DOWN) brandPressTime = System.currentTimeMillis()
-                else if (event.action == android.view.MotionEvent.ACTION_UP) {
-                    if (System.currentTimeMillis() - brandPressTime >= quickPanelThreshold) showQuickPanel()
-                } else if (event.action == android.view.MotionEvent.ACTION_CANCEL) {
-                    brandPressTime = 0
+                when (event.action) {
+                    android.view.MotionEvent.ACTION_DOWN ->
+                        brandPressTime = if (event.y < resources.displayMetrics.heightPixels * 0.12f)
+                            System.currentTimeMillis() else 0L
+                    android.view.MotionEvent.ACTION_UP -> {
+                        if (brandPressTime > 0 && System.currentTimeMillis() - brandPressTime >= quickPanelThreshold) showQuickPanel()
+                        brandPressTime = 0
+                    }
+                    android.view.MotionEvent.ACTION_CANCEL -> brandPressTime = 0
                 }
                 false
             }
@@ -84,13 +89,13 @@ open class MainActivity : Activity() {
     private fun createWeb() {
         // 先配置 WebView settings，再注入 JS 接口，最后 loadUrl —— 彻底消除桥接竞态
         web = WebView(this).apply {
-            WebShell.configureSettings(this)
+            WebShell.configureSettings(this, this@MainActivity)
             addJavascriptInterface(DeviceBridge(this@MainActivity, false, this), "BOTVNative")
         }
         setContentView(web)
         // 清理缓存 + 版本号 cache-busting，覆盖安装后强制刷新
         web.clearCache(true)
-        web.loadUrl("${Prefs.localBase(this)}#/$page?v=${BuildConfig.VERSION_CODE}")
+        web.loadUrl(Prefs.localBase(this) + "#/$page?v=" + BuildConfig.VERSION_CODE)
         web.requestFocus()
         webReleased = false
     }
@@ -192,8 +197,12 @@ open class MainActivity : Activity() {
         super.onNewIntent(intent)
         setIntent(intent)
         val reason = intent?.getStringExtra("reason")
-        page = if (this is GateActivity && reason != null && reason != "timeup") "lock?reason=$reason" else "quiz"
-        if (::web.isInitialized && !webReleased) {
+        val next = if (this is GateActivity && reason != null && reason != "timeup") "lock?reason=$reason" else "quiz"
+        val samePage = next == page
+        page = next
+        // WebView 已被 onStop 销毁时不在这里加载：onResume 会 createWeb() 统一加载，
+        // 两处都加载就是「回到答题页整页闪两下」的来源。
+        if (::web.isInitialized && !webReleased && !samePage) {
             web.loadUrl(Prefs.localBase(this) + "#/$page")
             web.evaluateJavascript("window.BOTV_RESUME&&BOTV_RESUME()", null)
         }

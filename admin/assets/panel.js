@@ -15,7 +15,8 @@
     { id: 'grading', name: '批改' },
     { id: 'records', name: '记录' },
     { id: 'device', name: '设备' },
-    { id: 'logs', name: '日志' }
+    { id: 'logs', name: '日志' },
+    { id: 'about', name: '关于/版本' }
   ];
 
   var DAYS = ['周一', '周二', '周三', '周四', '周五', '周六', '周日'];
@@ -58,7 +59,9 @@
     gradingTab: 'pending',
     logQuery: '',
     logTimer: null,
-    bank: { page: 0, size: 30, search: '', subject: '', selected: {} }
+    bank: { page: 0, size: 30, search: '', subject: '', selected: {} },
+    // 遥控导航状态
+    nav: { focusable: [], index: -1 }
   };
 
   var TOKEN_KEY = 'botv-panel-token';
@@ -131,6 +134,158 @@
     }
     return null;
   }
+
+  /* ==================== 遥控导航引擎（电视端） ==================== */
+
+  // 可聚焦元素选择器：所有带 .focusable 类、按钮、输入框、选择框、链接、开关行
+  var FOCUSABLE_SELECTOR = '.focusable, button:not([disabled]):not([tabindex="-1"]), input:not([disabled]):not([type=hidden]), select:not([disabled]), textarea:not([disabled]), a[href]';
+
+  // 扫描当前页面的可聚焦元素，按视觉顺序排序（上→下，左→右）
+  function scanFocusable() {
+    var nodes = Array.prototype.slice.call(document.querySelectorAll(FOCUSABLE_SELECTOR));
+    // 过滤掉不可见、在对话框外层等
+    nodes = nodes.filter(function (n) {
+      var r = n.getBoundingClientRect();
+      return r.width > 0 && r.height > 0 && getComputedStyle(n).visibility !== 'hidden' && getComputedStyle(n).display !== 'none';
+    });
+    // 按视觉位置排序：先 top，再 left
+    nodes.sort(function (a, b) {
+      var ra = a.getBoundingClientRect(), rb = b.getBoundingClientRect();
+      if (Math.abs(ra.top - rb.top) > 8) return ra.top - rb.top;
+      return ra.left - rb.left;
+    });
+    app.nav.focusable = nodes;
+    app.nav.index = -1;
+    return nodes;
+  }
+
+  // 设置焦点到指定索引
+  function setFocusIndex(idx, opts) {
+    opts = opts || {};
+    var nodes = app.nav.focusable;
+    if (!nodes.length) return false;
+    if (idx < 0) idx = 0;
+    if (idx >= nodes.length) idx = nodes.length - 1;
+    var el = nodes[idx];
+    if (!el) return false;
+    app.nav.index = idx;
+    try { el.focus({ preventScroll: opts.preventScroll !== false }); } catch (e) { el.focus(); }
+    // 可视区居中（避免被导航栏遮挡）
+    if (!opts.preventScroll) {
+      var r = el.getBoundingClientRect();
+      var vh = window.innerHeight || document.documentElement.clientHeight;
+      if (r.top < 60 || r.bottom > vh - 60) {
+        el.scrollIntoView({ behavior: 'auto', block: 'center', inline: 'nearest' });
+      }
+    }
+    return true;
+  }
+
+  // 向四个方向移动焦点
+  function moveFocus(dir) {
+    var nodes = app.nav.focusable;
+    var cur = app.nav.index >= 0 ? nodes[app.nav.index] : null;
+    // 页面是异步渲染的：缓存的节点可能已经不在 DOM 里，重扫一次并尽量保住当前焦点
+    if (!nodes.length || (cur && !document.body.contains(cur))) {
+      var active = document.activeElement;
+      scanFocusable();
+      nodes = app.nav.focusable;
+      var keep = nodes.indexOf(active);
+      if (keep >= 0) app.nav.index = keep;
+      cur = app.nav.index >= 0 ? nodes[app.nav.index] : null;
+    }
+    if (!nodes.length) return false;
+    var curRect = cur ? cur.getBoundingClientRect() : null;
+
+    var best = -1, bestDist = Infinity;
+    var vh = window.innerHeight || document.documentElement.clientHeight;
+    var vw = window.innerWidth || document.documentElement.clientWidth;
+
+    nodes.forEach(function (el, i) {
+      if (el === cur) return;
+      var r = el.getBoundingClientRect();
+      var dx = 0, dy = 0;
+      if (dir === 'up') { dy = curRect ? curRect.top - r.bottom : -r.top; }
+      else if (dir === 'down') { dy = curRect ? r.top - curRect.bottom : r.top; }
+      else if (dir === 'left') { dx = curRect ? curRect.left - r.right : -r.left; }
+      else if (dir === 'right') { dx = curRect ? r.left - curRect.right : r.left; }
+
+      // 必须在正确方向
+      if (dir === 'up' && dy <= 8) return;
+      if (dir === 'down' && dy <= 8) return;
+      if (dir === 'left' && dx <= 8) return;
+      if (dir === 'right' && dx <= 8) return;
+
+      // 正交方向对齐容差（中心点在对方 40% 范围内）
+      var cx = (r.left + r.right) / 2, cy = (r.top + r.bottom) / 2;
+      var ccx = curRect ? (curRect.left + curRect.right) / 2 : vw / 2;
+      var ccy = curRect ? (curRect.top + curRect.bottom) / 2 : vh / 2;
+      var ortho = dir === 'up' || dir === 'down' ? Math.abs(cx - ccx) : Math.abs(cy - ccy);
+      var size = dir === 'up' || dir === 'down' ? Math.max(r.width, curRect ? curRect.width : 1) : Math.max(r.height, curRect ? curRect.height : 1);
+      if (ortho > size * 0.6) return;
+
+      // 距离：主方向距离 + 正交惩罚
+      var dist = (dir === 'up' || dir === 'down' ? dy : dx) + ortho * 0.3;
+      if (dist < bestDist) { bestDist = dist; best = i; }
+    });
+
+    if (best >= 0) return setFocusIndex(best);
+    // 边界兜底：上/左 → 最后一个，下/右 → 第一个
+    if (dir === 'up' || dir === 'left') return setFocusIndex(nodes.length - 1);
+    if (dir === 'down' || dir === 'right') return setFocusIndex(0);
+    return false;
+  }
+
+  // 初始化页面焦点（优先首个 .focusable.primary，否则首个）
+  function initPageFocus() {
+    scanFocusable();
+    var primary = document.querySelector('.focusable.primary');
+    if (primary) {
+      var idx = app.nav.focusable.indexOf(primary);
+      if (idx >= 0) return setFocusIndex(idx);
+    }
+    return setFocusIndex(0);
+  }
+
+  // 全局键盘/遥控器事件处理
+  function onGlobalKey(e) {
+    var tag = (e.target && e.target.tagName) || '';
+    var isInput = tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || (e.target && e.target.isContentEditable);
+    // 输入框内：方向键让光标移动，Enter/空格走浏览器原生提交，都不拦截
+    if (isInput) return;
+
+    var handled = false;
+    switch (e.key) {
+      case 'ArrowUp': handled = moveFocus('up'); break;
+      case 'ArrowDown': handled = moveFocus('down'); break;
+      case 'ArrowLeft': handled = moveFocus('left'); break;
+      case 'ArrowRight': handled = moveFocus('right'); break;
+      case 'Enter':
+      case ' ': // 空格也作为确认
+        if (document.activeElement && typeof document.activeElement.click === 'function') {
+          document.activeElement.click();
+          handled = true;
+        }
+        break;
+      case 'Escape':
+        // 关闭最上层对话框（mountDialog 自己的 Escape 是幂等的，双保险）
+        var overlay = document.querySelector('.overlay');
+        if (overlay) { overlay.click(); handled = true; }
+        break;
+    }
+    if (handled) { e.preventDefault(); e.stopPropagation(); }
+  }
+
+  // 注册全局键盘监听（启动时一次性注册）
+  document.addEventListener('keydown', onGlobalKey);
+
+  // 页面切换时重新扫描并初始化焦点
+  var originalRenderPage = renderPage;
+  renderPage = function () {
+    originalRenderPage.apply(this, arguments);
+    // 延迟到下一帧，确保 DOM 已挂载
+    setTimeout(function () { initPageFocus(); }, 0);
+  };
 
   function copyText(value) {
     var ta = el('textarea', { style: 'position:fixed;left:-9999px;top:0' });
@@ -288,7 +443,7 @@
     (actions || []).forEach(function (a) {
       foot.appendChild(el('button', {
         type: 'button',
-        class: 'btn ' + (a.kind || ''),
+        class: 'btn ' + (a.kind || '') + ' focusable',
         onclick: function () { a.onClick(close); }
       }, [a.label]));
     });
@@ -345,6 +500,8 @@
         if (window.console) console.error(e);
         fail(e);
       }
+      // 异步渲染完成：遥控器焦点列表要重新扫描
+      setTimeout(function () { if (typeof initPageFocus === 'function') initPageFocus(); }, 0);
     }, fail);
   }
 
@@ -393,7 +550,7 @@
   }
 
   function switchRow(title, desc, checked) {
-    var input = el('input', { type: 'checkbox', checked: !!checked });
+    var input = el('input', { type: 'checkbox', checked: !!checked, tabindex: '0', class: 'focusable' });
     return {
       root: el('label', { class: 'switch-row' }, [
         el('span', { class: 'switch' }, [input, el('span', { class: 'switch-track' })]),
@@ -518,6 +675,7 @@
         : null;
       return el('button', {
         type: 'button',
+        class: 'focusable',
         'data-page': p.id,
         onclick: function () { navigate(p.id); }
       }, [el('span', { class: 'nav-dot', 'aria-hidden': 'true' }), p.name, badge]);
@@ -533,7 +691,7 @@
         el('div', { class: 'side-device', id: 'sideDevice' }, ['']),
         el('div', { class: 'side-ver', id: 'sideVer' }, ['']),
         el('div', { class: 'row', style: 'margin-top:8px' }, [
-          el('button', { class: 'btn ghost sm', type: 'button', onclick: function () { logout(); } }, ['退出登录'])
+          el('button', { class: 'btn ghost sm focusable', type: 'button', onclick: function () { logout(); } }, ['退出登录'])
         ])
       ])
     ]);
@@ -665,7 +823,7 @@
       return Promise.all([get('/api/state'), get('/api/history?days=7')]);
     }, function (res) {
       var st = res[0], hist = res[1].items || [];
-      var l = st.learning || {}, cfg = st.config || {}, today = st.today || {};
+      var l = st.learning || {}, cfg = app.config || st.config || {}, today = st.today || {};
       var info = statusInfo(l, cfg);
 
       body.appendChild(heroCard(st, info, cfg));
@@ -701,10 +859,10 @@
       ]),
       el('p', { class: 'muted small', style: 'margin-top:6px' }, ['今天已用 ' + used.toFixed(0) + ' / ' + total + ' 分钟']),
       el('div', { class: 'hero-actions' }, [
-        el('button', { class: 'btn primary sm', type: 'button', onclick: function () { remoteAction('unlock', 30); } }, ['解锁 30 分']),
-        el('button', { class: 'btn sm', type: 'button', onclick: function () { remoteAction('unlock', 60); } }, ['解锁 60 分']),
-        el('button', { class: 'btn sm', type: 'button', onclick: function () { remoteAction('lock', 0); } }, ['立即锁定']),
-        el('button', { class: 'btn ghost sm', type: 'button', onclick: function () { remoteAction('cancel', 0); } }, ['恢复规则'])
+        el('button', { class: 'btn primary sm focusable', type: 'button', onclick: function () { remoteAction('unlock', 30); } }, ['解锁 30 分']),
+        el('button', { class: 'btn sm focusable', type: 'button', onclick: function () { remoteAction('unlock', 60); } }, ['解锁 60 分']),
+        el('button', { class: 'btn sm focusable', type: 'button', onclick: function () { remoteAction('lock', 0); } }, ['立即锁定']),
+        el('button', { class: 'btn ghost sm focusable', type: 'button', onclick: function () { remoteAction('cancel', 0); } }, ['恢复规则'])
       ])
     ]);
   }
@@ -735,10 +893,10 @@
       el('div', { class: 'row' }, [
         el('span', { class: 'small muted' }, ['临时解锁']),
         mins,
-        el('button', { class: 'btn primary sm', type: 'button', onclick: function () { remoteAction('unlock', num(mins.value)); } }, ['解锁']),
-        el('button', { class: 'btn danger sm', type: 'button', onclick: function () { remoteAction('lock', 0); } }, ['立即锁定']),
-        el('button', { class: 'btn sm', type: 'button', onclick: function () { remoteAction('cancel', 0); } }, ['恢复规则']),
-        el('button', { class: 'btn ghost sm', type: 'button', onclick: function () { remoteAction('indefinite', 0); } }, ['关闭管控'])
+        el('button', { class: 'btn primary sm focusable', type: 'button', onclick: function () { remoteAction('unlock', num(mins.value)); } }, ['解锁']),
+        el('button', { class: 'btn danger sm focusable', type: 'button', onclick: function () { remoteAction('lock', 0); } }, ['立即锁定']),
+        el('button', { class: 'btn sm focusable', type: 'button', onclick: function () { remoteAction('cancel', 0); } }, ['恢复规则']),
+        el('button', { class: 'btn ghost sm focusable', type: 'button', onclick: function () { remoteAction('indefinite', 0); } }, ['关闭管控'])
       ])
     ]);
     c.appendChild(body);
@@ -924,7 +1082,7 @@
       el('div', { style: 'margin-top:12px' }, [diff.root, rewardsGrid])
     ]));
     cNode.appendChild(el('div', { class: 'card-f' }, [
-      el('button', { class: 'btn primary', type: 'button', onclick: function () {
+      el('button', { class: 'btn primary focusable', type: 'button', onclick: function () {
         saveConfig({
           extraEnabled: extra.input.checked,
           wrongThreshold: num(threshold.value),
@@ -945,14 +1103,16 @@
     var c = app.config;
     var cNode = card('界面与反馈', '孩子端答题后的节奏');
     var autoNext = numInput(c.autoNextSeconds, 0, 30);
+    var ttsSwitch = switchRow('题目自动朗读', '没有预置语音时使用系统 TTS 朗读', c.ttsEnabled);
     cNode.appendChild(el('div', { class: 'card-b' }, [
       el('div', { class: 'grid grid-2' }, [
         field('自动继续', autoNext, '秒；0 表示手动点「继续」')
-      ])
+      ]),
+      ttsSwitch.root
     ]));
     cNode.appendChild(el('div', { class: 'card-f' }, [
-      el('button', { class: 'btn primary', type: 'button', onclick: function () {
-        saveConfig({ autoNextSeconds: num(autoNext.value) })
+      el('button', { class: 'btn primary focusable', type: 'button', onclick: function () {
+        saveConfig({ autoNextSeconds: num(autoNext.value), ttsEnabled: ttsSwitch.input.checked })
           .then(function () { clean(); toast('已保存', 'ok'); }, function (err) { toast(err.message, 'bad'); });
       } }, ['保存'])
     ]));
@@ -1827,17 +1987,39 @@
 
   /* ==================== 设备 ==================== */
 
+  // 打开系统权限设置页
+  // 权限项 → 原生桥的键。只有「在电视上打开的面板」才有 BOTVNative 桥；
+  // 手机浏览器里没有这座桥，只能提示去电视端「权限与设置」页操作。
+  var PERMISSION_KEYS = {
+    action_service: 'accessibility',
+    action_overlay: 'overlay',
+    action_accessibility: 'accessibility',
+    action_usage: 'usage',
+    action_autostart: 'battery',
+    action_uninstall: 'uninstall'
+  };
+
+  function openPermissionSetting(action) {
+    var key = PERMISSION_KEYS[action];
+    if (!key) { toast('未知权限操作', 'bad'); return; }
+    var bridge = window.BOTVNative;
+    if (bridge && typeof bridge.openSettings === 'function') {
+      try { bridge.openSettings(key); return; }
+      catch (e) { toast('打开设置失败：' + e.message, 'bad'); return; }
+    }
+    toast('请在电视上打开「权限与设置」页面调整这一项', 'warn');
+  }
+
   function pageDevice(root) {
-    var body = pageShell(root, '设备', '运行状态、集成令牌、更新与安全设置');
+    var body = pageShell(root, '设备', '运行状态、集成令牌与安全设置');
     load(body, function () {
       return Promise.all([
-        get('/api/device'), get('/api/integration'), get('/api/update'), get('/api/holidays')
+        get('/api/device'), get('/api/integration'), get('/api/holidays')
       ]);
     }, function (res) {
-      var d = res[0], ig = res[1] || {}, up = res[2] || {}, hol = res[3] || {};
+      var d = res[0], ig = res[1] || {}, hol = res[2] || {};
       body.appendChild(deviceCard(d, hol));
       body.appendChild(integrationCard(ig));
-      body.appendChild(updateCard(up));
       body.appendChild(passwordCard());
       body.appendChild(holidayCard(hol));
     });
@@ -1847,20 +2029,30 @@
     var m = d.monitor || {};
     var auto = d.autostart || {};
     var items = [
-      ['拦截服务', m.service, m.service ? '运行中' : '未运行'],
-      ['悬浮窗', m.overlay, m.overlay ? '已授权' : '缺失'],
-      ['无障碍', m.accessibilityEnabled, m.accessibilityEnabled ? '已开启' : '未开启'],
-      ['使用情况', m.usage, m.usage ? '已授权' : '未授权'],
-      ['开机自启', auto.ok, auto.ok ? '正常' : '可能被拦截'],
-      ['防卸载', d.uninstallProtected, d.uninstallProtected ? '开启' : '未开启']
+      ['拦截服务', m.service, m.service ? '运行中' : '未运行', 'action_service'],
+      ['悬浮窗', m.overlay, m.overlay ? '已授权' : '缺失', 'action_overlay'],
+      ['无障碍', m.accessibilityEnabled, m.accessibilityEnabled ? '已开启' : '未开启', 'action_accessibility'],
+      ['使用情况', m.usage, m.usage ? '已授权' : '未授权', 'action_usage'],
+      ['开机自启', auto.ok, auto.ok ? '正常' : '可能被拦截', 'action_autostart'],
+      ['防卸载', d.uninstallProtected, d.uninstallProtected ? '开启' : '未开启', 'action_uninstall']
     ];
     var matrix = el('div', { class: 'matrix' }, items.map(function (it) {
-      return el('div', { class: 'matrix-item' }, [
+      var action = it[3];
+      return el('button', { 
+        class: 'matrix-item focusable', 
+        'data-action': action,
+        tabindex: '0'
+      }, [
         el('span', { class: 'dot ' + (it[1] ? 'ok' : 'bad') }),
         el('span', {}, [it[0]]),
         el('span', {}, [it[2]])
       ]);
     }));
+    
+    // 绑定权限项点击事件：跳转系统设置页
+    matrix.querySelectorAll('.matrix-item').forEach(function (btn) {
+      btn.addEventListener('click', function () { openPermissionSetting(btn.getAttribute('data-action')); });
+    });
 
     var nameInput = textInput(d.name || '', '设备名称');
     nameInput.style.maxWidth = '240px';
@@ -2045,17 +2237,12 @@
     var search = el('input', {
       type: 'search', class: 'input search', placeholder: '关键词过滤，回车搜索', value: app.logQuery
     });
-    var auto = el('input', { type: 'checkbox' });
     var pre = el('pre', { class: 'log-box', tabindex: '0' }, ['加载中…']);
     var countLabel = el('span', { class: 'muted small' }, ['']);
 
     var cardNode = el('div', { class: 'card' }, [
       el('div', { class: 'toolbar' }, [
         search,
-        el('label', { class: 'row tight' }, [
-          el('span', { class: 'switch' }, [auto, el('span', { class: 'switch-track' })]),
-          el('span', { class: 'small muted' }, ['自动刷新'])
-        ]),
         el('button', { class: 'btn sm', type: 'button', onclick: function () { fetchLogs(); } }, ['刷新']),
         el('button', { class: 'btn sm', type: 'button', onclick: function () { copyText(allLines.join('\n')); } }, ['复制']),
         el('button', { class: 'btn sm', type: 'button', onclick: exportLogs }, ['导出 ZIP']),
@@ -2105,26 +2292,69 @@
     search.addEventListener('keydown', function (e) { if (e.key === 'Enter') fetchLogs(); });
     search.addEventListener('input', debounce(function () { fetchLogs(); }, 400));
 
-    auto.addEventListener('change', function () {
-      if (app.logTimer) { clearInterval(app.logTimer); app.logTimer = null; }
-      if (auto.checked) app.logTimer = setInterval(fetchLogs, 5000);
-    });
-
     fetchLogs();
   }
 
   function exportLogs() {
-    var headers = {};
-    if (app.token) headers['X-Admin-Token'] = app.token;
-    fetch(base() + '/api/logs/export', { headers: headers }).then(function (res) {
-      if (!res.ok) throw new Error('导出失败（' + res.status + '）');
-      return res.blob();
-    }).then(function (blob) {
-      var a = el('a', { href: URL.createObjectURL(blob), download: 'babyontv-logs.zip' });
-      document.body.appendChild(a);
-      a.click();
-      setTimeout(function () { URL.revokeObjectURL(a.href); document.body.removeChild(a); }, 1000);
-    }).catch(function (err) { toast(err.message || '导出失败', 'bad'); });
+    // 浏览器原生下载拿不到自定义请求头，令牌只能放进查询串（服务端对导出这一个接口认它）。
+    var url = base() + '/api/logs/export' + (app.token ? '?token=' + encodeURIComponent(app.token) : '');
+    var bridge = window.BOTVNative;
+    // 电视内置 WebView 会拦掉脚本发起的下载（点了没反应），交给原生下载落盘。
+    if (bridge && typeof bridge.downloadFile === 'function') {
+      try {
+        toast('正在保存日志包…', 'ok');
+        var path = bridge.downloadFile(url);
+        if (path) { toast('已保存到 ' + path, 'ok'); return; }
+        toast('保存失败，请在手机浏览器里打开面板再导出', 'bad');
+        return;
+      } catch (e) { toast('保存失败：' + e.message, 'bad'); return; }
+    }
+    var a = el('a', { href: url, download: 'babyontv-logs.zip' });
+    document.body.appendChild(a);
+    a.click();
+    setTimeout(function () { if (a.parentNode) a.parentNode.removeChild(a); }, 1000);
+    toast('开始下载日志包', 'ok');
+  }
+
+  function pageAbout(root) {
+    var body = pageShell(root, '关于/版本', '应用版本、更新与开源信息');
+    load(body, function () {
+      return Promise.all([
+        get('/api/device'), get('/api/update')
+      ]);
+    }, function (res) {
+      var d = res[0], up = res[1] || {};
+      body.appendChild(versionCard(d, up));
+      body.appendChild(updateCard(up));
+      body.appendChild(openSourceCard());
+    });
+  }
+
+  function versionCard(d, up) {
+    var cNode = card('版本信息', '当前运行版本与构建详情');
+    cNode.appendChild(el('div', { class: 'card-b' }, [
+      el('div', { class: 'kv' }, [
+        el('div', { class: 'kv-k' }, ['应用名称']), el('div', { class: 'kv-v' }, ['宝宝请听题']),
+        el('div', { class: 'kv-k' }, ['当前版本']), el('div', { class: 'kv-v' }, ['v' + (d.version || up.current || '—')]),
+        el('div', { class: 'kv-k' }, ['最新版本']), el('div', { class: 'kv-v' }, [up.latest ? 'v' + up.latest : '未获取']),
+        el('div', { class: 'kv-k' }, ['版本代号']), el('div', { class: 'kv-v' }, [(d.flavor === 'tv' ? '电视版' : '手机版')]),
+        el('div', { class: 'kv-k' }, ['设备名称']), el('div', { class: 'kv-v' }, [d.name || '—']),
+        el('div', { class: 'kv-k' }, ['架构']), el('div', { class: 'kv-v' }, [d.arch || '—'])
+      ])
+    ]));
+    return cNode;
+  }
+
+  function openSourceCard() {
+    var cNode = card('开源协议与致谢', '本项目基于开源协议发布，感谢所有贡献者');
+    cNode.appendChild(el('div', { class: 'card-b' }, [
+      el('div', { class: 'kv' }, [
+        el('div', { class: 'kv-k' }, ['项目地址']), el('div', { class: 'kv-v' }, [el('a', { href: 'https://github.com/RonL89/BabyOnTV', target: '_blank' }, ['https://github.com/RonL89/BabyOnTV'])]),
+        el('div', { class: 'kv-k' }, ['协议']), el('div', { class: 'kv-v' }, ['Apache-2.0']),
+        el('div', { class: 'kv-k' }, ['第三方许可']), el('div', { class: 'kv-v' }, [el('a', { href: 'https://github.com/RonL89/BabyOnTV/blob/main/THIRD_PARTY_NOTICES.md', target: '_blank', rel: 'noreferrer' }, ['查看完整列表'])])
+      ])
+    ]));
+    return cNode;
   }
 
   /* ==================== 页面表 ==================== */
@@ -2136,7 +2366,8 @@
     grading: pageGrading,
     records: pageRecords,
     device: pageDevice,
-    logs: pageLogs
+    logs: pageLogs,
+    about: pageAbout
   };
 
   /* ==================== 启动 ==================== */

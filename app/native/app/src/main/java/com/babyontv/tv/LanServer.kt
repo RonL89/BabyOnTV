@@ -2,6 +2,8 @@ package com.babyontv.tv
 
 import android.content.Context
 import android.content.res.AssetManager
+import android.os.Build
+import android.webkit.WebView
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.BufferedInputStream
@@ -21,8 +23,15 @@ class LanServer(
     private val port: Int = 8099
 ) {
     private var socket: ServerSocket? = null
-    // 浏览器会并发 6 个连接加载面板，线程太少会排队；静态文件已缓存压缩，CPU 开销很小
-    private val pool = Executors.newFixedThreadPool(if (BuildConfig.FLAVOR == "tv") 4 else 6)
+    // 响应一律 Connection: close，浏览器每个请求开一条新连接；它还会预连接几条空连接，
+    // 这些空连接要等 soTimeout(8s) 才释放。固定小线程池会被它们占满，后面的真实请求
+    // 排队到浏览器超时断开，服务端再往死连接写 → 满屏 Broken pipe。
+    // 改成带上限的可伸缩池：空闲线程自动回收，突发并发也不会互相阻塞。
+    private val pool = java.util.concurrent.ThreadPoolExecutor(
+        8, 64, 30L, java.util.concurrent.TimeUnit.SECONDS,
+        java.util.concurrent.SynchronousQueue(),
+        { r -> Thread(r, "lan-http").apply { isDaemon = true } }
+    )
     @Volatile private var running = false
     var boundPort: Int = -1
         private set
@@ -111,7 +120,9 @@ class LanServer(
                 val local = c.inetAddress?.isLoopbackAddress ?: false
                 route(method, path, query, headers, body, out, local)
             } catch (e: Exception) {
-
+                // 客户端先断开是常态（面板取消请求、浏览器关页面），不该记成错误刷满日志；
+                // 其它异常必须留痕，否则接口 500 时日志里一条线索都没有。
+                if (!isClientGone(e)) Diag.error("HTTP", "handle failed", e)
             }
         }
     }
@@ -122,7 +133,9 @@ class LanServer(
             kv[0] to java.net.URLDecoder.decode(kv.getOrElse(1) { "" }, "UTF-8")
         }
         val deviceAccess = local && headers["x-device-token"] == AdminAuth.deviceToken
-        val token = headers["authorization"]?.removePrefix("Bearer ") ?: headers["x-admin-token"]
+        // 导出走的是浏览器原生下载（<a download>），拿不到自定义请求头，令牌只能放查询串
+        val downloadToken = if (path == "/api/logs/export") q["token"] else null
+        val token = headers["authorization"]?.removePrefix("Bearer ") ?: headers["x-admin-token"] ?: downloadToken
         if (path == "/api/auth" && method == "POST") {
             val input = try { JSONObject(body) } catch (e: Exception) { JSONObject() }
             val remember = input.optBoolean("remember")
@@ -305,6 +318,8 @@ class LanServer(
             }
             path == "/api/device" && method == "GET" -> return json(out, 200, JSONObject().put("name", Prefs.deviceName(context))
                 .put("version", BuildConfig.VERSION_NAME).put("flavor", BuildConfig.FLAVOR).put("ip", localIp() ?: "").put("port", boundPort)
+                .put("arch", Build.SUPPORTED_ABIS.joinToString(","))
+                .put("android", (if (Build.VERSION.SDK_INT >= 26) android.webkit.WebView.getCurrentWebViewPackage()?.let { it.versionName } else "") ?: "")
                 .put("uninstallProtected", UninstallGuard.active(context)).put("autostart", Watchdog.report(context)).put("monitor", GateService.diagnostics(context)))
             path == "/api/device/uninstall-guard" && method == "DELETE" -> {
                 // 家长在网页端可以关闭防卸载（安全：需要家长登录 token）
@@ -362,8 +377,13 @@ class LanServer(
             }
         }
         } catch (e: Exception) {
+            // 客户端提前断开（刷新页面、切页、关标签、手机休眠）会让写响应抛 Broken pipe /
+            // Connection reset。这不是设备故障，记成 ERROR 只会把真问题淹掉，静默丢弃即可。
+            if (isClientGone(e)) return
             Diag.error("HTTP", "$method $path failed", e)
-            return json(out, 400, JSONObject().put("error", "bad_request").put("message", e.message ?: "请求格式错误"))
+            return try {
+                json(out, 400, JSONObject().put("error", "bad_request").put("message", e.message ?: "请求格式错误"))
+            } catch (_: Exception) { }
         }
 
 
@@ -423,6 +443,18 @@ class LanServer(
         reply(out, code, "application/json; charset=utf-8", obj.toString().toByteArray())
 
     private fun err(message: String) = JSONObject().put("error", "request_failed").put("message", message)
+
+    /** 连接已由客户端关闭：写失败属于正常现象，不该进错误日志，也不该再尝试写回去 */
+    private fun isClientGone(e: Throwable): Boolean {
+        var cur: Throwable? = e
+        while (cur != null) {
+            val msg = cur.message.orEmpty().lowercase()
+            if (msg.contains("broken pipe") || msg.contains("connection reset") ||
+                msg.contains("socket closed") || msg.contains("stream closed") || msg.contains("epipe")) return true
+            cur = cur.cause
+        }
+        return false
+    }
 
     private fun reply(out: OutputStream, code: Int, contentType: String?, bytes: ByteArray?, extra: Map<String, String> = emptyMap()) {
         val body = bytes ?: ByteArray(0)
